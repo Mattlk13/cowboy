@@ -176,7 +176,7 @@ init(Parent, Ref, Socket, Transport, ProxyHeader, Opts) ->
 				parent=Parent, ref=Ref, socket=Socket,
 				transport=Transport, proxy_header=ProxyHeader, opts=Opts,
 				peer=Peer, sock=Sock, cert=Cert,
-				last_streamid=maps:get(max_keepalive, Opts, 100)},
+				last_streamid=maps:get(max_keepalive, Opts, 1000)},
 			setopts_active(State),
 			loop(set_timeout(State, request_timeout));
 		{{error, Reason}, _, _} ->
@@ -245,6 +245,9 @@ loop(State=#state{parent=Parent, socket=Socket, transport=Transport, opts=Opts,
 		{timeout, _, _} ->
 			loop(State);
 		%% System messages.
+		{'EXIT', Parent, shutdown} ->
+			Reason = {stop, {exit, shutdown}, 'Parent process requested shutdown.'},
+			loop(initiate_closing(State, Reason));
 		{'EXIT', Parent, Reason} ->
 			terminate(State, {stop, {exit, Reason}, 'Parent process terminated.'});
 		{system, From, Request} ->
@@ -1029,8 +1032,9 @@ commands(State0=#state{socket=Socket, transport=Transport, out_state=wait, strea
 	#stream{version=Version} = lists:keyfind(StreamID, #stream.id, Streams),
 	{State1, Headers} = connection(State0, Headers0, StreamID, Version),
 	State = State1#state{out_state=done},
-	%% @todo Ensure content-length is set.
+	%% @todo Ensure content-length is set. 204 must never have content-length set.
 	Response = cow_http:response(StatusCode, 'HTTP/1.1', headers_to_list(Headers)),
+	%% @todo 204 and 304 responses must not include a response body. (RFC7230 3.3.1, RFC7230 3.3.2)
 	case Body of
 		{sendfile, _, _, _} ->
 			Transport:send(Socket, Response),
@@ -1307,14 +1311,21 @@ stream_terminate(State0=#state{opts=Opts, in_streamid=InStreamID, in_state=InSta
 			stream_next(State)
 	end.
 
-stream_next(State=#state{out_streamid=OutStreamID, streams=Streams}) ->
+stream_next(State0=#state{opts=Opts, active=Active, out_streamid=OutStreamID, streams=Streams}) ->
 	NextOutStreamID = OutStreamID + 1,
 	case lists:keyfind(NextOutStreamID, #stream.id, Streams) of
 		false ->
-			State#state{out_streamid=NextOutStreamID, out_state=wait};
+			State0#state{out_streamid=NextOutStreamID, out_state=wait};
 		#stream{queue=Commands} ->
+			State = case Active of
+				true -> State0;
+				false -> active(State0)
+			end,
 			%% @todo Remove queue from the stream.
-			commands(State#state{out_streamid=NextOutStreamID, out_state=wait},
+			%% We set the flow to the initial flow size even though
+			%% we might have sent some data through already due to pipelining.
+			Flow = maps:get(initial_stream_flow_size, Opts, 65535),
+			commands(State#state{flow=Flow, out_streamid=NextOutStreamID, out_state=wait},
 				NextOutStreamID, Commands)
 	end.
 
@@ -1432,6 +1443,13 @@ early_error(StatusCode0, #state{socket=Socket, transport=Transport,
 	end,
 	ok.
 
+initiate_closing(State=#state{streams=[]}, Reason) ->
+	terminate(State, Reason);
+initiate_closing(State=#state{streams=[_Stream|Streams],
+		out_streamid=OutStreamID}, Reason) ->
+	terminate_all_streams(State, Streams, Reason),
+	State#state{last_streamid=OutStreamID}.
+
 -spec terminate(_, _) -> no_return().
 terminate(undefined, Reason) ->
 	exit({shutdown, Reason});
@@ -1495,9 +1513,10 @@ terminate_linger_loop(State=#state{socket=Socket}, TimerRef, Messages) ->
 system_continue(_, _, State) ->
 	loop(State).
 
--spec system_terminate(any(), _, _, {#state{}, binary()}) -> no_return().
-system_terminate(Reason, _, _, State) ->
-	terminate(State, {stop, {exit, Reason}, 'sys:terminate/2,3 was called.'}).
+-spec system_terminate(any(), _, _, #state{}) -> no_return().
+system_terminate(Reason0, _, _, State) ->
+	Reason = {stop, {exit, Reason0}, 'sys:terminate/2,3 was called.'},
+	loop(initiate_closing(State, Reason)).
 
 -spec system_code_change(Misc, _, _, _) -> {ok, Misc} when Misc::{#state{}, binary()}.
 system_code_change(Misc, _, _, _) ->

@@ -24,13 +24,17 @@
 -import(cowboy_test, [raw_recv_head/1]).
 -import(cowboy_test, [raw_recv/3]).
 
+suite() ->
+	[{timetrap, 30000}].
+
 all() -> [{group, http}].
 
 groups() -> [{http, [parallel], ct_helper:all(?MODULE)}].
 
 init_per_group(Name = http, Config) ->
 	cowboy_test:init_http(Name = http, #{
-		env => #{dispatch => cowboy_router:compile(init_routes(Config))}
+		env => #{dispatch => cowboy_router:compile(init_routes(Config))},
+		max_keepalive => 100
 	}, Config).
 
 end_per_group(Name, _) ->
@@ -1554,13 +1558,13 @@ pipeline(Config) ->
 	ConnPid = gun_open(Config),
 	Refs = [{
 		gun:get(ConnPid, "/"),
-		gun:post(ConnPid, "/full/read_body", [], <<0:800000>>)
+		gun:post(ConnPid, "/full/read_body", [], <<0:80000>>)
 	} || _ <- lists:seq(1, 25)],
 	_ = [begin
-		{response, nofin, 200, _} = gun:await(ConnPid, Ref1),
-		{ok, <<"Hello world!">>} = gun:await_body(ConnPid, Ref1),
-		{response, nofin, 200, _} = gun:await(ConnPid, Ref2),
-		{ok, <<0:800000>>} = gun:await_body(ConnPid, Ref2)
+		{response, nofin, 200, _} = gun:await(ConnPid, Ref1, infinity),
+		{ok, <<"Hello world!">>} = gun:await_body(ConnPid, Ref1, infinity),
+		{response, nofin, 200, _} = gun:await(ConnPid, Ref2, infinity),
+		{ok, <<0:80000>>} = gun:await_body(ConnPid, Ref2, infinity)
 	end || {Ref1, Ref2} <- Refs],
 	ok.
 
@@ -1882,22 +1886,22 @@ no_body_in_head_response(Config) ->
 %1xx responses never include a message body. (RFC7230 3.3)
 
 no_body_in_204_response(Config) ->
-	doc("204 responses never include a message body. (RFC7230 3.3)"),
+	doc("204 responses never include a message body. Cowboy produces "
+		"a 500 error response when attempting to do so. (RFC7230 3.3)"),
 	Client = raw_open(Config),
 	ok = raw_send(Client, [
-		"GET /resp/reply2/204 HTTP/1.1\r\n"
+		"GET /resp/reply4/204body HTTP/1.1\r\n"
 		"Host: localhost\r\n"
 		"\r\n"]),
-	{_, 204, _, Rest} = cow_http:parse_status_line(raw_recv_head(Client)),
-	{_, <<>>} = cow_http:parse_headers(Rest),
-	{error, timeout} = raw_recv(Client, 1, 1000),
+	{_, 500, _, _} = cow_http:parse_status_line(raw_recv_head(Client)),
 	ok.
 
 no_body_in_204_response_stream(Config) ->
-	doc("204 responses never include a message body. (RFC7230 3.3)"),
+	doc("204 responses never include a message body. Attempting to "
+		"stream the body produces a crash on the server-side. (RFC7230 3.3)"),
 	Client = raw_open(Config),
 	ok = raw_send(Client, [
-		"GET /resp/stream_reply2/204 HTTP/1.1\r\n"
+		"GET /resp/stream_reply2/204body HTTP/1.1\r\n"
 		"Host: localhost\r\n"
 		"\r\n"]),
 	{_, 204, _, Rest} = cow_http:parse_status_line(raw_recv_head(Client)),
@@ -1906,22 +1910,22 @@ no_body_in_204_response_stream(Config) ->
 	ok.
 
 no_body_in_304_response(Config) ->
-	doc("304 responses never include a message body. (RFC7230 3.3)"),
+	doc("304 responses never include a message body. Cowboy produces "
+		"a 500 error response when attempting to do so. (RFC7230 3.3)"),
 	Client = raw_open(Config),
 	ok = raw_send(Client, [
-		"GET /resp/reply2/304 HTTP/1.1\r\n"
+		"GET /resp/reply4/304body HTTP/1.1\r\n"
 		"Host: localhost\r\n"
 		"\r\n"]),
-	{_, 304, _, Rest} = cow_http:parse_status_line(raw_recv_head(Client)),
-	{_, <<>>} = cow_http:parse_headers(Rest),
-	{error, timeout} = raw_recv(Client, 1, 1000),
+	{_, 500, _, _} = cow_http:parse_status_line(raw_recv_head(Client)),
 	ok.
 
 no_body_in_304_response_stream(Config) ->
-	doc("304 responses never include a message body. (RFC7230 3.3)"),
+	doc("304 responses never include a message body. Attempting to "
+		"stream the body produces a crash on the server-side. (RFC7230 3.3)"),
 	Client = raw_open(Config),
 	ok = raw_send(Client, [
-		"GET /resp/stream_reply2/304 HTTP/1.1\r\n"
+		"GET /resp/stream_reply2/304body HTTP/1.1\r\n"
 		"Host: localhost\r\n"
 		"\r\n"]),
 	{_, 304, _, Rest} = cow_http:parse_status_line(raw_recv_head(Client)),

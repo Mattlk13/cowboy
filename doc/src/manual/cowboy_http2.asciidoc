@@ -22,10 +22,13 @@ opts() :: #{
     connection_window_margin_size  => 0..16#7fffffff,
     connection_window_update_threshold => 0..16#7fffffff,
     enable_connect_protocol        => boolean(),
+    goaway_initial_timeout         => timeout(),
+    goaway_complete_timeout        => timeout(),
     idle_timeout                   => timeout(),
     inactivity_timeout             => timeout(),
     initial_connection_window_size => 65535..16#7fffffff,
     initial_stream_window_size     => 0..16#7fffffff,
+    linger_timeout                 => timeout(),
     logger                         => module(),
     max_concurrent_streams         => non_neg_integer() | infinity,
     max_connection_buffer_size     => non_neg_integer(),
@@ -91,6 +94,16 @@ Whether to enable the extended CONNECT method to allow
 protocols like Websocket to be used over an HTTP/2 stream.
 This option is experimental and disabled by default.
 
+goaway_initial_timeout (1000)::
+
+Time in ms to wait for any in-flight stream creations before stopping to accept
+new streams on an existing connection during a graceful shutdown.
+
+goaway_complete_timeout (3000)::
+
+Time in ms to wait for ongoing streams to complete before closing the connection
+during a graceful shutdown.
+
 idle_timeout (60000)::
 
 Time in ms with no data received before Cowboy closes the connection.
@@ -113,6 +126,14 @@ initial_stream_window_size (65535)::
 Initial window size in bytes for new streams. This is the total amount
 of data (from request bodies for example) that may be buffered
 by a single stream before the user code explicitly requests it.
+
+linger_timeout (1000)::
+
+Time in ms that Cowboy will wait when closing the connection. This is
+necessary to avoid the TCP reset problem as described in the
+https://tools.ietf.org/html/rfc7230#section-6.6[section 6.6 of RFC7230].
+In HTTP/2's case the GOAWAY message might also be lost when
+closing the connection immediately.
 
 logger (error_logger)::
 
@@ -161,7 +182,7 @@ following the client's advertised maximum.
 Note that actual frame sizes may be lower than the limit when
 there is not enough space left in the flow control window.
 
-max_received_frame_rate ({1000, 10000})::
+max_received_frame_rate ({10000, 10000})::
 
 Maximum frame rate allowed per connection. The rate is expressed
 as a tuple `{NumFrames, TimeMs}` indicating how many frames are
@@ -235,7 +256,12 @@ too many `WINDOW_UPDATE` frames.
 
 == Changelog
 
+* *2.9*: The `goaway_initial_timeout` and `goaway_complete_timeout`
+         options were added.
 * *2.8*: The `active_n` option was added.
+* *2.8*: The `linger_timeout` option was added.
+* *2.8*: The `max_received_frame_rate` default value has
+         been multiplied by 10 as the default was too low.
 * *2.7*: Add the options `connection_window_margin_size`,
          `connection_window_update_threshold`,
          `max_connection_window_size`, `max_stream_window_size`,

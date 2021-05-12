@@ -421,8 +421,12 @@ parse_header_fun(<<"accept">>) -> fun cow_http_hd:parse_accept/1;
 parse_header_fun(<<"accept-charset">>) -> fun cow_http_hd:parse_accept_charset/1;
 parse_header_fun(<<"accept-encoding">>) -> fun cow_http_hd:parse_accept_encoding/1;
 parse_header_fun(<<"accept-language">>) -> fun cow_http_hd:parse_accept_language/1;
+parse_header_fun(<<"access-control-request-headers">>) -> fun cow_http_hd:parse_access_control_request_headers/1;
+parse_header_fun(<<"access-control-request-method">>) -> fun cow_http_hd:parse_access_control_request_method/1;
 parse_header_fun(<<"authorization">>) -> fun cow_http_hd:parse_authorization/1;
 parse_header_fun(<<"connection">>) -> fun cow_http_hd:parse_connection/1;
+parse_header_fun(<<"content-encoding">>) -> fun cow_http_hd:parse_content_encoding/1;
+parse_header_fun(<<"content-language">>) -> fun cow_http_hd:parse_content_language/1;
 parse_header_fun(<<"content-length">>) -> fun cow_http_hd:parse_content_length/1;
 parse_header_fun(<<"content-type">>) -> fun cow_http_hd:parse_content_type/1;
 parse_header_fun(<<"cookie">>) -> fun cow_cookie:parse_cookie/1;
@@ -432,10 +436,14 @@ parse_header_fun(<<"if-modified-since">>) -> fun cow_http_hd:parse_if_modified_s
 parse_header_fun(<<"if-none-match">>) -> fun cow_http_hd:parse_if_none_match/1;
 parse_header_fun(<<"if-range">>) -> fun cow_http_hd:parse_if_range/1;
 parse_header_fun(<<"if-unmodified-since">>) -> fun cow_http_hd:parse_if_unmodified_since/1;
+parse_header_fun(<<"max-forwards">>) -> fun cow_http_hd:parse_max_forwards/1;
+parse_header_fun(<<"origin">>) -> fun cow_http_hd:parse_origin/1;
+parse_header_fun(<<"proxy-authorization">>) -> fun cow_http_hd:parse_proxy_authorization/1;
 parse_header_fun(<<"range">>) -> fun cow_http_hd:parse_range/1;
 parse_header_fun(<<"sec-websocket-extensions">>) -> fun cow_http_hd:parse_sec_websocket_extensions/1;
 parse_header_fun(<<"sec-websocket-protocol">>) -> fun cow_http_hd:parse_sec_websocket_protocol_req/1;
 parse_header_fun(<<"sec-websocket-version">>) -> fun cow_http_hd:parse_sec_websocket_version_req/1;
+parse_header_fun(<<"trailer">>) -> fun cow_http_hd:parse_trailer/1;
 parse_header_fun(<<"upgrade">>) -> fun cow_http_hd:parse_upgrade/1;
 parse_header_fun(<<"x-forwarded-for">>) -> fun cow_http_hd:parse_x_forwarded_for/1.
 
@@ -798,12 +806,16 @@ reply(Status, Headers, SendFile = {sendfile, _, Len, _}, Req)
 	}, SendFile, Req);
 %% 204 responses must not include content-length. 304 responses may
 %% but only when set explicitly. (RFC7230 3.3.1, RFC7230 3.3.2)
+%% Neither status code must include a response body. (RFC7230 3.3)
 reply(Status, Headers, Body, Req)
 		when Status =:= 204; Status =:= 304 ->
+	0 = iolist_size(Body),
 	do_reply(Status, Headers, Body, Req);
-reply(Status= <<"204",_/bits>>, Headers, Body, Req) ->
+reply(Status = <<"204",_/bits>>, Headers, Body, Req) ->
+	0 = iolist_size(Body),
 	do_reply(Status, Headers, Body, Req);
-reply(Status= <<"304",_/bits>>, Headers, Body, Req) ->
+reply(Status = <<"304",_/bits>>, Headers, Body, Req) ->
+	0 = iolist_size(Body),
 	do_reply(Status, Headers, Body, Req);
 reply(Status, Headers, Body, Req)
 		when is_integer(Status); is_binary(Status) ->
@@ -832,6 +844,17 @@ stream_reply(Status, Req) ->
 	-> Req when Req::req().
 stream_reply(_, _, #{has_sent_resp := _}) ->
 	error(function_clause);
+%% 204 and 304 responses must NOT send a body. We therefore
+%% transform the call to a full response and expect the user
+%% to NOT call stream_body/3 afterwards. (RFC7230 3.3)
+stream_reply(Status = 204, Headers=#{}, Req) ->
+	reply(Status, Headers, <<>>, Req);
+stream_reply(Status = <<"204",_/bits>>, Headers=#{}, Req) ->
+	reply(Status, Headers, <<>>, Req);
+stream_reply(Status = 304, Headers=#{}, Req) ->
+	reply(Status, Headers, <<>>, Req);
+stream_reply(Status = <<"304",_/bits>>, Headers=#{}, Req) ->
+	reply(Status, Headers, <<>>, Req);
 stream_reply(Status, Headers=#{}, Req) when is_integer(Status); is_binary(Status) ->
 	cast({headers, Status, response_headers(Headers, Req)}, Req),
 	done_replying(Req, headers).
