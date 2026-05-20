@@ -27,6 +27,7 @@ opts() :: #{
     idle_timeout               => timeout(),
     inactivity_timeout         => timeout(),
     initial_stream_flow_size   => non_neg_integer(),
+    invalid_response_headers   => error_terminate | ignore,
     linger_timeout             => timeout(),
     logger                     => module(),
     max_authorization_header_value_length => non_neg_integer(),
@@ -116,6 +117,15 @@ This option can be updated at any time using the
 inactivity_timeout (300000)::
 
 **DEPRECATED** Time in ms with nothing received at all before Cowboy closes the connection.
+
+invalid_response_headers (error_terminate)::
+
+Prevent sending HTTP responses with invalid response headers.
+The default `error_terminate` will result in an HTTP 500
+response sent when invalid response headers are detected,
+except when the invalid headers are trailer headers: in that
+case the connection is dropped. When set to `ignore` the
+check is not performed at all: use at your own risk.
 
 initial_stream_flow_size (65535)::
 
@@ -210,6 +220,7 @@ Ordered list of stream handlers that will handle all stream events.
 
 == Changelog
 
+* *2.16*: The `invalid_response_headers` option was added.
 * *2.15*: The `max_authorization_header_value_length` and `max_cookie_header_value_length` options were added.
 * *2.13*: The `inactivity_timeout` option was deprecated.
 * *2.13*: The `active_n` default value was changed to `1`.

@@ -75,7 +75,8 @@ Always write one or more tests before modifying the code. There
 must be at least one test that fails before and succeeds after.
 
 If you are not able to write a failing test, abort and tell
-the user about it.
+the user about it. This does not apply to refactoring as in
+the refactoring case existing tests are enough.
 
 ### When writing tests
 We want to test both success and failure conditions.
