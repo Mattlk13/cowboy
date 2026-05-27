@@ -252,7 +252,7 @@ handlers. `relay` is a faster method introduced in
 Cowboy 2.14 and sends data directly. `relay` is
 intended to become the default in Cowboy 3.0.
 
-data_delivery_flow (pos_integer())::
+data_delivery_flow (131072)::
 
 When the `relay` data delivery method is used,
 this value may be used to decide how much the
