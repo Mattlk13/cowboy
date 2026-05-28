@@ -160,7 +160,7 @@ make_error_log(init, [StreamID, Req, Opts], Class, Exception, Stacktrace) ->
 		"Stacktrace: ~p~n"
 		"Req: ~p~n"
 		"Opts: ~p~n",
-		[Class, Exception, StreamID, Stacktrace, Req, Opts]};
+		[Class, Exception, StreamID, Stacktrace, hide_cert(Req), Opts]};
 make_error_log(data, [StreamID, IsFin, Data, State], Class, Exception, Stacktrace) ->
 	{log, error,
 		"Unhandled exception ~p:~p in cowboy_stream:data(~p, ~p, Data, State)~n"
@@ -191,4 +191,19 @@ make_error_log(early_error, [StreamID, Reason, PartialReq, Resp, Opts],
 		"PartialReq: ~p~n"
 		"Resp: ~p~n"
 		"Opts: ~p~n",
-		[Class, Exception, StreamID, Stacktrace, Reason, PartialReq, Resp, Opts]}.
+		[Class, Exception, StreamID, Stacktrace, Reason, hide_cert(PartialReq), Resp, Opts]}.
+
+hide_cert(Req=#{cert := Cert}) when is_binary(Cert) ->
+	Req#{cert => '...'};
+hide_cert(Req) ->
+	Req.
+
+-ifdef(TEST).
+
+hide_cert_test() ->
+	#{cert := '...'} = hide_cert(#{cert => <<"cert">>}),
+	#{cert := undefined} = hide_cert(#{cert => undefined}),
+	true = #{} =:= hide_cert(#{}),
+	ok.
+
+-endif.
