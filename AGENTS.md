@@ -8,6 +8,7 @@ Cowboy is a small, fast and modern HTTP server for Erlang/OTP.
 - `make eunit` - unit tests
 - `make proper` - property tests
 - `make dialyzer` - static analysis
+- `make docs` - build documentation
 
 Always use `make` to build, even if wanting to build a single module.
 
@@ -109,15 +110,12 @@ Discard any *change* that is not then run the tests again.
 You can review changes with `git diff`.
 
 ## When doing code analysis
-
 Always perform code analysis on Cowboy and all its dependencies
 as a unit. A code analysis of Cowboy alone is likely to miss
 things.
 
 Cowboy uses Cowlib for most of its parsing.
 
-Cowlib is typically strict at parsing but lax at building
-protocol output. It is the responsibility of the caller to
-sanitize the data given to Cowlib to build protocol output.
-The same applies to data given to Cowboy, regardless of
-Cowboy having functionality to prevent certain issues.
+The security model is documented in `doc/src/guide/security_model.asciidoc`.
+A security checklist to be applied to Cowboy applications
+can be found in `doc/src/guide/security_checklist.asciidoc`.
