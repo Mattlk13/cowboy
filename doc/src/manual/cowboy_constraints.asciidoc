@@ -21,6 +21,10 @@ Built-in constraints:
 * link:man:cowboy_constraints:int(3)[cowboy_constraints:int(3)] - Integer constraint
 * link:man:cowboy_constraints:nonempty(3)[cowboy_constraints:nonempty(3)] - Non-empty constraint
 
+Constraint generators:
+
+* link:man:cowboy_constraints:from_fun(3)[cowboy_constraints:from_fun(3)] - Create a constraint from a 1-arity function
+
 == Types
 
 === constraint()

@@ -124,5 +124,15 @@ Notice that for this case you get both the error and
 the value that was given to the constraint that produced
 this error.
 
+For the common case of constraints that only need to implement
+the `forward` operation, the `cowboy_constraints:from_fun/1`
+function can be used. It turns a 1-arity function (that returns
+a value on success or throws on failure) into a proper constraint.
+
+[source,erlang]
+----
+Constraint = cowboy_constraints:from_fun(fun cow_http:ensure_token/1).
+----
+
 Cowboy will not catch exceptions coming from constraint
 functions. They should be written to not emit any exceptions.

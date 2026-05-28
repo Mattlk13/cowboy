@@ -58,6 +58,7 @@ This function is not meant to be called directly.
 
 link:man:cowboy_constraints(3)[cowboy_constraints(3)],
 link:man:cowboy_constraints:nonempty(3)[cowboy_constraints:nonempty(3)],
+link:man:cowboy_constraints:from_fun(3)[cowboy_constraints:from_fun(3)],
 link:man:cowboy_router(3)[cowboy_router(3)],
 link:man:cowboy_req:match_cookies(3)[cowboy_req:match_cookies(3)],
 link:man:cowboy_req:match_qs(3)[cowboy_req:match_qs(3)]

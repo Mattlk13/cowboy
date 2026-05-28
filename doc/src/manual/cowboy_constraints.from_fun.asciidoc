@@ -1,0 +1,60 @@
+= cowboy_constraints:from_fun(3)
+
+== Name
+
+cowboy_constraints:from_fun - Create a constraint from a 1-arity function
+
+== Description
+
+[source,erlang]
+----
+from_fun(Fun) -> Constraint
+
+Fun :: fun((any()) -> any())
+Constraint :: fun()
+----
+
+Create a constraint function from a 1-arity validation or
+conversion function.
+
+The provided function is called as `Fun(Value)` for the
+`forward` operation. The generated constraint function
+succeeds when a value is returned, and fails with reason
+`not_valid` when an exception is thrown.
+
+The generated constraint does not support the `reverse`
+operation and only provides limited `format_error` support.
+
+== Arguments
+
+Fun::
+
+A function of arity 1. On success it must return the
+(optionally converted) value. On failure it must throw
+an exception.
+
+== Return value
+
+A constraint function.
+
+== Changelog
+
+* *2.15*: Function introduced.
+
+== Examples
+
+.Create a constraint using an existing validation function
+
+[source,erlang]
+----
+Constraint = cowboy_constraints:from_fun(fun cow_http:ensure_token/1).
+----
+
+== See also
+
+link:man:cowboy_constraints(3)[cowboy_constraints(3)],
+link:man:cowboy_constraints:int(3)[cowboy_constraints:int(3)],
+link:man:cowboy_constraints:nonempty(3)[cowboy_constraints:nonempty(3)],
+link:man:cowboy_router(3)[cowboy_router(3)],
+link:man:cowboy_req:match_cookies(3)[cowboy_req:match_cookies(3)],
+link:man:cowboy_req:match_qs(3)[cowboy_req:match_qs(3)]
