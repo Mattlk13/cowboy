@@ -13,6 +13,8 @@ include::modern_web.asciidoc[The modern Web]
 
 include::erlang_web.asciidoc[Erlang and the Web]
 
+include::security_model.asciidoc[Security model]
+
 = Introduction
 
 include::introduction.asciidoc[Introduction]
@@ -72,6 +74,8 @@ include::streams.asciidoc[Streams]
 include::middlewares.asciidoc[Middlewares]
 
 include::performance.asciidoc[Performance]
+
+include::security_checklist.asciidoc[Security checklist]
 
 = Additional information
 
