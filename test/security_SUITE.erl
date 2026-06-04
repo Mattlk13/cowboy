@@ -39,6 +39,7 @@ groups() ->
 		http2_empty_frame_flooding_headers_continuation,
 		http2_empty_frame_flooding_push_promise,
 		http2_infinite_continuations,
+		http2_hpack_bomb,
 		http2_ping_flood,
 		http2_reset_flood,
 		http2_settings_flood,
@@ -220,6 +221,23 @@ http2_empty_frame_flooding_push_promise(Config) ->
 	%% Cowboy rejects all PUSH_PROMISE frames therefore no flooding
 	%% can take place.
 	{ok, <<_:24, 7:8, _:72, 1:32>>} = gen_tcp:recv(Socket, 17, 6000),
+	ok.
+
+http2_hpack_bomb(Config) ->
+	doc("Send many repeated request headers that get compressed "
+		"as 1 byte per header field line. Confirm that the "
+		"connection gets closed. (CVE-2026-49975)"),
+	{ok, Socket} = rfc7540_SUITE:do_handshake(Config),
+	{HeadersBlock, _} = cow_hpack:encode([
+		{<<":method">>, <<"GET">>},
+		{<<":scheme">>, <<"http">>},
+		{<<":authority">>, <<"localhost">>},
+		{<<":path">>, <<"/">>}
+		|lists:duplicate(10000, {<<"cookie">>, <<"a=b">>})
+	]),
+	ok = gen_tcp:send(Socket, cow_http2:headers(1, fin, HeadersBlock)),
+	%% Receive an ENHANCE_YOUR_CALM connection error.
+	{ok, <<_:24, 7:8, _:72, 11:32>>} = gen_tcp:recv(Socket, 17, 6000),
 	ok.
 
 http2_infinite_continuations(Config) ->

@@ -234,6 +234,49 @@ max_frame_size_sent(Config) ->
 		cowboy:stop_listener(?FUNCTION_NAME)
 	end.
 
+max_headers(Config0) ->
+	doc("Confirm that headers received by Cowboy are limited in number "
+		"by the max_headers configuration value."),
+	ProtoOpts = #{
+		env => #{dispatch => init_dispatch(Config0)},
+		max_headers => 10000
+	},
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], ProtoOpts),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	Config = [{port, Port}|Config0],
+	try
+		%% Sending exactly 10000 headers.
+		{ok, Socket1} = do_handshake(Config),
+		Headers1 = [
+			{<<":method">>, <<"GET">>},
+			{<<":scheme">>, <<"http">>},
+			{<<":authority">>, <<"localhost">>},
+			{<<":path">>, <<"/">>}
+			|lists:duplicate(9996, {<<"x-custom">>, <<"value">>})
+		],
+		{HeadersBlock1, _} = cow_hpack:encode(Headers1),
+		ok = gen_tcp:send(Socket1, cow_http2:headers(1, fin, HeadersBlock1)),
+		%% Success: we get a response back.
+		{ok, <<_:24, 1:8, _:40>>} = gen_tcp:recv(Socket1, 9, 6000),
+		gen_tcp:close(Socket1),
+		%% Sending 10001 headers, above the limit.
+		{ok, Socket2} = do_handshake(Config),
+		Headers2 = [
+			{<<":method">>, <<"GET">>},
+			{<<":scheme">>, <<"http">>},
+			{<<":authority">>, <<"localhost">>},
+			{<<":path">>, <<"/">>}
+			|lists:duplicate(9997, {<<"x-custom">>, <<"value">>})
+		],
+		{HeadersBlock2, _} = cow_hpack:encode(Headers2),
+		ok = gen_tcp:send(Socket2, cow_http2:headers(1, fin, HeadersBlock2)),
+		%% Receive an ENHANCE_YOUR_CALM connection error.
+		{ok, <<_:24, 7:8, _:72, 11:32>>} = gen_tcp:recv(Socket2, 17, 6000),
+		ok
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
 persistent_term_router(Config) ->
 	doc("The router can retrieve the routes from persistent_term storage."),
 	case erlang:function_exported(persistent_term, get, 1) of

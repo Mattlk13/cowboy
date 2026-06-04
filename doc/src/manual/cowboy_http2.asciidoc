@@ -33,6 +33,7 @@ opts() :: #{
     initial_stream_window_size     => 0..16#7fffffff,
     linger_timeout                 => timeout(),
     logger                         => module(),
+    max_cancel_stream_rate         => {pos_integer(), timeout()},
     max_concurrent_streams         => non_neg_integer() | infinity,
     max_connection_buffer_size     => non_neg_integer(),
     max_connection_window_size     => 0..16#7fffffff,
@@ -41,9 +42,9 @@ opts() :: #{
     max_fragmented_header_block_size => 16384..16#7fffffff,
     max_frame_size_received        => 16384..16777215,
     max_frame_size_sent            => 16384..16777215 | infinity,
+    max_headers                    => non_neg_integer(),
     max_received_frame_rate        => {pos_integer(), timeout()},
     max_reset_stream_rate          => {pos_integer(), timeout()},
-    max_cancel_stream_rate         => {pos_integer(), timeout()},
     max_stream_buffer_size         => non_neg_integer(),
     max_stream_window_size         => 0..16#7fffffff,
     preface_timeout                => timeout(),
@@ -170,6 +171,14 @@ logger (error_logger)::
 
 The module that will be used to write log messages.
 
+max_cancel_stream_rate ({500, 10000})::
+
+Maximum cancel stream rate per connection. This can be used to
+protect against misbehaving or malicious peers, by limiting the
+number of streams that the peer can reset over a certain time period.
+The rate is expressed as a tuple `{NumCancels, TimeMs}`. This is
+similar to a supervisor restart intensity/period.
+
 max_concurrent_streams (infinity)::
 
 Maximum number of concurrent streams allowed on the connection.
@@ -227,6 +236,12 @@ following the client's advertised maximum.
 Note that actual frame sizes may be lower than the limit when
 there is not enough space left in the flow control window.
 
+max_headers (100)::
+
+Maximum number of header fields allowed per request field blocks.
+This option is applied independently to header and trailer
+field blocks.
+
 max_received_frame_rate ({10000, 10000})::
 
 Maximum frame rate allowed per connection. The rate is expressed
@@ -241,14 +256,6 @@ protect against misbehaving or malicious peers that do not follow
 the protocol, leading to the server resetting streams, by limiting
 the number of streams that can be reset over a certain time period.
 The rate is expressed as a tuple `{NumResets, TimeMs}`. This is
-similar to a supervisor restart intensity/period.
-
-max_cancel_stream_rate ({500, 10000})::
-
-Maximum cancel stream rate per connection. This can be used to
-protect against misbehaving or malicious peers, by limiting the
-number of streams that the peer can reset over a certain time period.
-The rate is expressed as a tuple `{NumCancels, TimeMs}`. This is
 similar to a supervisor restart intensity/period.
 
 max_stream_buffer_size (8000000)::
@@ -321,6 +328,7 @@ too many `WINDOW_UPDATE` frames.
 
 == Changelog
 
+* *2.16*: The `max_headers` option was added.
 * *2.13*: The `inactivity_timeout` option was deprecated.
 * *2.13*: The `active_n` default value was changed to `1`.
 * *2.13*: The `dynamic_buffer` and `hibernate` options were added.
