@@ -1,0 +1,9 @@
+[appendix]
+== Changes since Cowboy 2.16
+
+The following patch versions were released since Cowboy 2.16:
+
+=== Cowboy 2.16.1
+
+Update Cowlib to 2.17.1 to fix HTTP/2 header decoding
+broken in 2.17.0.

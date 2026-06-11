@@ -2,7 +2,7 @@
 
 PROJECT = cowboy
 PROJECT_DESCRIPTION = Small, fast, modern HTTP server.
-PROJECT_VERSION = 2.16.0
+PROJECT_VERSION = 2.16.1
 PROJECT_REGISTERED = cowboy_clock
 
 # Options.
@@ -16,7 +16,7 @@ CT_OPTS += -ct_hooks cowboy_ct_hook [] # -boot start_sasl
 LOCAL_DEPS = crypto
 
 DEPS = cowlib ranch
-dep_cowlib = git https://github.com/ninenines/cowlib 2.17.0
+dep_cowlib = git https://github.com/ninenines/cowlib 2.17.1
 dep_ranch = git https://github.com/ninenines/ranch 1.8.1
 
 ifeq ($(COWBOY_QUICER),1)
