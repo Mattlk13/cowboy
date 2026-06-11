@@ -1396,33 +1396,16 @@ headers_to_list(Headers0=#{<<"set-cookie">> := SetCookies}) ->
 headers_to_list(Headers) ->
 	maps:to_list(Headers).
 
-%% We wrap the sendfile call into a try/catch because on OTP-20
-%% and earlier a few different crashes could occur for sockets
-%% that were closing or closed. For example a badarg in
-%% erlang:port_get_data(#Port<...>) or a badmatch like
-%% {{badmatch,{error,einval}},[{prim_file,sendfile,8,[]}...
-%%
-%% OTP-21 uses a NIF instead of a port so the implementation
-%% and behavior has dramatically changed and it is unclear
-%% whether it will be necessary in the future.
-%%
-%% This try/catch prevents some noisy logs to be written
-%% when these errors occur.
 sendfile(State=#state{socket=Socket, transport=Transport, opts=Opts},
 		{sendfile, Offset, Bytes, Path}) ->
-	try
-		%% When sendfile is disabled we explicitly use the fallback.
-		{ok, _} = maybe_socket_error(State,
-			case maps:get(sendfile, Opts, true) of
-				true -> Transport:sendfile(Socket, Path, Offset, Bytes);
-				false -> ranch_transport:sendfile(Transport, Socket, Path, Offset, Bytes, [])
-			end
-		),
-		ok
-	catch _:_ ->
-		terminate(State, {socket_error, sendfile_crash,
-			'An error occurred when using the sendfile function.'})
-	end.
+	%% When sendfile is disabled we explicitly use the fallback.
+	{ok, _} = maybe_socket_error(State,
+		case maps:get(sendfile, Opts, true) of
+			true -> Transport:sendfile(Socket, Path, Offset, Bytes);
+			false -> ranch_transport:sendfile(Transport, Socket, Path, Offset, Bytes, [])
+		end
+	),
+	ok.
 
 %% Flush messages specific to cowboy_http before handing over the
 %% connection to another protocol.
