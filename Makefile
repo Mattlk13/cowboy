@@ -59,6 +59,11 @@ hex_req_cowlib = >= 2.16.0 and < 3.0.0
 
 include erlang.mk
 
+# Extra files to include in Hex package.
+
+HEX_TARBALL_FILES += doc/src/guide/security_model.asciidoc \
+	doc/src/guide/security_checklist.asciidoc
+
 # Don't run the examples/autobahn test suites by default.
 
 ifndef FULL
