@@ -42,8 +42,8 @@
 	invalid_response_headers => error_terminate | ignore,
 	linger_timeout => timeout(),
 	logger => module(),
-	max_authorization_header_value_length => non_neg_integer(),
 	max_authority_length => non_neg_integer(),
+	max_authorization_header_value_length => non_neg_integer(),
 	max_cookie_header_value_length => non_neg_integer(),
 	max_empty_lines => non_neg_integer(),
 	max_header_name_length => non_neg_integer(),
@@ -564,16 +564,10 @@ parse_uri(_, State, _) ->
 	error_terminate(400, State, {connection_error, protocol_error,
 		'Invalid request-line or request-target. (RFC7230 3.1.1, RFC7230 5.3)'}).
 
-%% @todo We probably want to apply max_authority_length also
-%% to the host header and to document this option. It might
-%% also be useful for HTTP/2 requests.
 parse_uri_authority(Rest, State=#state{opts=Opts}, Method) ->
 	parse_uri_authority(Rest, State, Method, <<>>,
 		maps:get(max_authority_length, Opts, 255)).
 
-parse_uri_authority(_, State, _, _, 0) ->
-	error_terminate(414, State, {connection_error, limit_reached,
-		'The authority component of the absolute URI is longer than configuration allows. (RFC7230 2.7.1)'});
 parse_uri_authority(<<C, Rest/bits>>, State, Method, SoFar, Remaining) ->
 	case C of
 		$\r ->
@@ -593,7 +587,11 @@ parse_uri_authority(<<C, Rest/bits>>, State, Method, SoFar, Remaining) ->
 		$\s -> parse_version(Rest, State, Method, SoFar, <<"/">>, <<>>);
 		$? -> parse_uri_query(Rest, State, Method, SoFar, <<"/">>, <<>>);
 		$# -> skip_uri_fragment(Rest, State, Method, SoFar, <<"/">>, <<>>);
-		C -> parse_uri_authority(Rest, State, Method, <<SoFar/binary, C>>, Remaining - 1)
+		C when Remaining > 0 ->
+			parse_uri_authority(Rest, State, Method, <<SoFar/binary, C>>, Remaining - 1);
+		_ ->
+			error_terminate(414, State, {connection_error, limit_reached,
+				'The authority component of the absolute URI is longer than configuration allows. (RFC7230 2.7.1)'})
 	end.
 
 parse_uri_path(<<C, Rest/bits>>, State, Method, Authority, SoFar) ->
@@ -723,6 +721,11 @@ max_header_value_length(<<"authorization">>, #{max_authorization_header_value_le
 	Max;
 max_header_value_length(<<"cookie">>, #{max_cookie_header_value_length := Max}) ->
 	Max;
+%% Stop early when possible. But because the max header value length
+%% is a soft limit we may not catch a long host value here. We will
+%% check the host length again later.
+max_header_value_length(<<"host">>, Opts) ->
+	maps:get(max_authority_length, Opts, 255);
 max_header_value_length(_, #{max_header_value_length := Max}) ->
 	Max;
 max_header_value_length(_, _) ->
@@ -798,7 +801,16 @@ request(Buffer, State=#state{transport=Transport,
 					'The host header is different than the absolute-form authority component. (RFC7230 5.4)'})
 	end.
 
-request_parse_host(Buffer, State=#state{transport=Transport, in_state=PS}, Headers, RawHost) ->
+request_parse_host(Buffer, State=#state{opts=Opts}, Headers, RawHost) ->
+	case byte_size(RawHost) > maps:get(max_authority_length, Opts, 255) of
+		true ->
+			error_terminate(414, State, {connection_error, limit_reached,
+				'The host header is longer than configuration allows. (RFC7230 2.7.1, RFC7230 5.4)'});
+		false ->
+			request_parse_host1(Buffer, State, Headers, RawHost)
+	end.
+
+request_parse_host1(Buffer, State=#state{transport=Transport, in_state=PS}, Headers, RawHost) ->
 	try cow_http_hd:parse_host(RawHost) of
 		{Host, undefined} ->
 			request(Buffer, State, Headers, Host, default_port(Transport:secure()));

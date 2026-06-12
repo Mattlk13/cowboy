@@ -714,6 +714,59 @@ invalid_response_headers_switch_protocol_ignore(Config) ->
 		cowboy:stop_listener(?FUNCTION_NAME)
 	end.
 
+max_authority_length_host_header(Config) ->
+	doc("Confirm the max_authority_length option correctly limits "
+		"the length of the authority component in the host header."),
+	Dispatch = cowboy_router:compile([{'_', [{"/", hello_h, []}]}]),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => Dispatch},
+		max_authority_length => 10
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		RawConfig = [{port, Port}, {type, tcp}, {opts, []}|Config],
+		%% At limit.
+		#{code := 200} = rfc7230_SUITE:do_raw(RawConfig,
+			"GET / HTTP/1.1\r\n"
+			"Host: example.co\r\n"
+			"\r\n"),
+		%% Over limit.
+		#{code := 414, client := Client} = rfc7230_SUITE:do_raw(RawConfig,
+			"GET / HTTP/1.1\r\n"
+			"Host: example.com\r\n"
+			"\r\n"),
+		{error, closed} = raw_recv(Client, 0, 1000)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+max_authority_length_request_line(Config) ->
+	doc("Confirm the max_authority_length option correctly limits "
+		"the length of the authority component in the absolute-form "
+		"target of the request line."),
+	Dispatch = cowboy_router:compile([{'_', [{"/", hello_h, []}]}]),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => Dispatch},
+		max_authority_length => 10
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		RawConfig = [{port, Port}, {type, tcp}, {opts, []}|Config],
+		%% At limit.
+		#{code := 200} = rfc7230_SUITE:do_raw(RawConfig,
+			"GET http://example.co/ HTTP/1.1\r\n"
+			"Host: example.co\r\n"
+			"\r\n"),
+		%% Over limit.
+		#{code := 414, client := Client} = rfc7230_SUITE:do_raw(RawConfig,
+			"GET http://example.com/ HTTP/1.1\r\n"
+			"Host: example.com\r\n"
+			"\r\n"),
+		{error, closed} = raw_recv(Client, 0, 1000)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
 max_authorization_header_value_length(Config) ->
 	doc("Confirm the max_authorization_header_value_length option "
 		"correctly limits the length of authorization header values."),

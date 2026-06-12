@@ -45,6 +45,7 @@
 	initial_stream_window_size => 0..16#7fffffff,
 	linger_timeout => timeout(),
 	logger => module(),
+	max_authority_length => non_neg_integer(),
 	max_cancel_stream_rate => {pos_integer(), timeout()},
 	max_concurrent_streams => non_neg_integer() | infinity,
 	max_connection_buffer_size => non_neg_integer(),
@@ -561,7 +562,16 @@ headers_frame(State, StreamID, IsFin, Headers, PseudoHeaders, BodyLen) ->
 				'Requests translated from HTTP/1.1 must include a host header. (RFC7540 8.1.2.3, RFC7230 5.4)'})
 	end.
 
-headers_frame_parse_host(State=#state{ref=Ref, peer=Peer, sock=Sock, cert=Cert, proxy_header=ProxyHeader},
+headers_frame_parse_host(State=#state{opts=Opts}, StreamID, IsFin, Headers, PseudoHeaders, BodyLen, Authority) ->
+	case byte_size(Authority) > maps:get(max_authority_length, Opts, 255) of
+		true ->
+			reset_stream(State, StreamID, {stream_error, protocol_error,
+				'The request authority is longer than configuration allows. (RFC7540 8.1.2.3)'});
+		false ->
+			headers_frame_parse_host1(State, StreamID, IsFin, Headers, PseudoHeaders, BodyLen, Authority)
+	end.
+
+headers_frame_parse_host1(State=#state{ref=Ref, peer=Peer, sock=Sock, cert=Cert, proxy_header=ProxyHeader},
 		StreamID, IsFin, Headers, PseudoHeaders=#{method := Method, scheme := Scheme, path := PathWithQs},
 		BodyLen, Authority) ->
 	try cow_http_hd:parse_host(Authority) of

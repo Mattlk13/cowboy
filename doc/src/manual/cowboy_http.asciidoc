@@ -30,6 +30,7 @@ opts() :: #{
     invalid_response_headers   => error_terminate | ignore,
     linger_timeout             => timeout(),
     logger                     => module(),
+    max_authority_length       => non_neg_integer(),
     max_authorization_header_value_length => non_neg_integer(),
     max_cookie_header_value_length        => non_neg_integer(),
     max_empty_lines            => non_neg_integer(),
@@ -143,6 +144,11 @@ logger (error_logger)::
 
 The module that will be used to write log messages.
 
+max_authority_length (255)::
+
+Maximum length of the authority component of the target URI.
+This is a hard limit.
+
 max_authorization_header_value_length::
 
 Maximum length of the `authorization` header value.
@@ -220,6 +226,7 @@ Ordered list of stream handlers that will handle all stream events.
 
 == Changelog
 
+* *2.17*: The `max_authority_length` option was added.
 * *2.16*: The `invalid_response_headers` option was added.
 * *2.15*: The `max_authorization_header_value_length` and `max_cookie_header_value_length` options were added.
 * *2.13*: The `inactivity_timeout` option was deprecated.

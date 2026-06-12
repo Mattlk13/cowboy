@@ -190,6 +190,84 @@ initial_connection_window_size(Config) ->
 		cowboy:stop_listener(?FUNCTION_NAME)
 	end.
 
+max_authority_length_authority_pseudo_header(Config0) ->
+	doc("Confirm the max_authority_length option correctly limits "
+		"the length of the authority component in the :authority pseudo-header."),
+	ProtoOpts = #{
+		env => #{dispatch => init_dispatch(Config0)},
+		max_authority_length => 10
+	},
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], ProtoOpts),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	Config = [{port, Port}|Config0],
+	try
+		%% At limit.
+		{ok, Socket1} = do_handshake(Config),
+		Headers1 = [
+			{<<":method">>, <<"GET">>},
+			{<<":scheme">>, <<"http">>},
+			{<<":authority">>, <<"example.co">>},
+			{<<":path">>, <<"/">>}
+		],
+		{HeadersBlock1, _} = cow_hpack:encode(Headers1),
+		ok = gen_tcp:send(Socket1, cow_http2:headers(1, fin, HeadersBlock1)),
+		{ok, <<_:24, 1:8, _:40>>} = gen_tcp:recv(Socket1, 9, 6000),
+		gen_tcp:close(Socket1),
+		%% Over limit.
+		{ok, Socket2} = do_handshake(Config),
+		Headers2 = [
+			{<<":method">>, <<"GET">>},
+			{<<":scheme">>, <<"http">>},
+			{<<":authority">>, <<"example.com">>},
+			{<<":path">>, <<"/">>}
+		],
+		{HeadersBlock2, _} = cow_hpack:encode(Headers2),
+		ok = gen_tcp:send(Socket2, cow_http2:headers(1, fin, HeadersBlock2)),
+		{ok, <<_:24, 3:8, _:8, 1:32, 1:32>>} = gen_tcp:recv(Socket2, 13, 6000),
+		gen_tcp:close(Socket2)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+max_authority_length_host_header(Config0) ->
+	doc("Confirm the max_authority_length option correctly limits "
+		"the length of the authority component in the host header."),
+	ProtoOpts = #{
+		env => #{dispatch => init_dispatch(Config0)},
+		max_authority_length => 10
+	},
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], ProtoOpts),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	Config = [{port, Port}|Config0],
+	try
+		%% At limit.
+		{ok, Socket1} = do_handshake(Config),
+		Headers1 = [
+			{<<":method">>, <<"GET">>},
+			{<<":scheme">>, <<"http">>},
+			{<<":path">>, <<"/">>},
+			{<<"host">>, <<"example.co">>}
+		],
+		{HeadersBlock1, _} = cow_hpack:encode(Headers1),
+		ok = gen_tcp:send(Socket1, cow_http2:headers(1, fin, HeadersBlock1)),
+		{ok, <<_:24, 1:8, _:40>>} = gen_tcp:recv(Socket1, 9, 6000),
+		gen_tcp:close(Socket1),
+		%% Over limit.
+		{ok, Socket2} = do_handshake(Config),
+		Headers2 = [
+			{<<":method">>, <<"GET">>},
+			{<<":scheme">>, <<"http">>},
+			{<<":path">>, <<"/">>},
+			{<<"host">>, <<"example.com">>}
+		],
+		{HeadersBlock2, _} = cow_hpack:encode(Headers2),
+		ok = gen_tcp:send(Socket2, cow_http2:headers(1, fin, HeadersBlock2)),
+		{ok, <<_:24, 3:8, _:8, 1:32, 1:32>>} = gen_tcp:recv(Socket2, 13, 6000),
+		gen_tcp:close(Socket2)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
 max_frame_size_sent(Config) ->
 	doc("Confirm that frames sent by Cowboy are limited in size "
 		"by the max_frame_size_sent configuration value."),
