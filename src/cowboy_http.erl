@@ -498,10 +498,13 @@ parse_request(Buffer, State=#state{opts=Opts, in_streamid=InStreamID}, EmptyLine
 				'The request-line length is larger than configuration allows. (RFC7230 3.1.1)'});
 		nomatch ->
 			{more, State#state{buffer=Buffer, in_state=#ps_request_line{empty_lines=EmptyLines}}};
-		1 when EmptyLines =:= MaxEmptyLines ->
+		error ->
+			error_terminate(400, State, {connection_error, protocol_error,
+				'The request-line must use the CRLF line terminator. (RFC7230 3.1.1, RFC7230 3.5)'});
+		0 when EmptyLines =:= MaxEmptyLines ->
 			error_terminate(400, State, {connection_error, limit_reached,
 				'More empty lines were received than configuration allows. (RFC7230 3.5)'});
-		1 ->
+		0 ->
 			<< _:16, Rest/bits >> = Buffer,
 			parse_request(Rest, State, EmptyLines + 1);
 		_ ->
@@ -530,8 +533,10 @@ parse_request(Buffer, State=#state{opts=Opts, in_streamid=InStreamID}, EmptyLine
 			end
 	end.
 
-match_eol(<< $\n, _/bits >>, N) ->
+match_eol(<< $\r, $\n, _/bits >>, N) ->
 	N;
+match_eol(<< $\n, _/bits >>, _) ->
+	error;
 match_eol(<< _, Rest/bits >>, N) ->
 	match_eol(Rest, N + 1);
 match_eol(_, _) ->
@@ -641,6 +646,10 @@ before_parse_headers(Rest, State, M, A, P, Q, V) ->
 
 %% Headers.
 
+parse_header(<< $\n, _/bits >>, State=#state{in_state=PS}, Headers) ->
+	error_terminate(400, State#state{in_state=PS#ps_header{headers=Headers}},
+		{connection_error, protocol_error,
+			'Header lines must use the CRLF line terminator. (RFC7230 3.2, RFC7230 3.5)'});
 %% We need two or more bytes in the buffer to continue.
 parse_header(Rest, State=#state{in_state=PS}, Headers) when byte_size(Rest) < 2 ->
 	{more, State#state{buffer=Rest, in_state=PS#ps_header{headers=Headers}}};
@@ -666,11 +675,13 @@ parse_header_colon(Buffer, State=#state{opts=Opts, in_state=PS}, Headers) ->
 				{connection_error, limit_reached,
 					'A header name is larger than configuration allows. (RFC7230 3.2.5, RFC6585 5)'});
 		nomatch ->
-			%% We don't have a colon but we might have an invalid header line,
-			%% so check if we have an LF and abort with an error if we do.
 			case match_eol(Buffer, 0) of
 				nomatch ->
 					{more, State#state{buffer=Buffer, in_state=PS#ps_header{headers=Headers}}};
+				error ->
+					error_terminate(400, State#state{in_state=PS#ps_header{headers=Headers}},
+						{connection_error, protocol_error,
+							'Header lines must use the CRLF line terminator. (RFC7230 3.2, RFC7230 3.5)'});
 				_ ->
 					error_terminate(400, State#state{in_state=PS#ps_header{headers=Headers}},
 						{connection_error, protocol_error,
@@ -713,6 +724,10 @@ parse_hd_before_value(Buffer, State=#state{opts=Opts, in_state=PS}, H, N) ->
 					'A header value is larger than configuration allows. (RFC7230 3.2.5, RFC6585 5)'});
 		nomatch ->
 			{more, State#state{buffer=Buffer, in_state=PS#ps_header{headers=H, name=N}}};
+		error ->
+			error_terminate(400, State#state{in_state=PS#ps_header{headers=H}},
+				{connection_error, protocol_error,
+					'Header lines must use the CRLF line terminator. (RFC7230 3.2, RFC7230 3.5)'});
 		_ ->
 			parse_hd_value(Buffer, State, H, N, <<>>)
 	end.

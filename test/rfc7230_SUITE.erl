@@ -195,6 +195,17 @@ limit_request_line_9000(Config) ->
 		"\r\n"]),
 	{error, closed} = raw_recv(Client, 0, 1000).
 
+reject_lf_line_breaks_request_line(Config) ->
+	doc("A server may accept header names separated by a single LF, instead of "
+		"CRLF. Cowboy rejects all requests that use LF as separator. (RFC7230 3.5)"),
+	#{code := 400, client := Client} = do_raw(Config, [
+		"POST /echo/read_body HTTP/1.1\n"
+		"Host: localhost\r\n"
+		"Transfer-encoding: chunked\r\n"
+		"\r\n"
+		"6\r\nHello \r\n5\r\nworld\r\n1\r\n!\r\n0\r\n\r\n"]),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
 %% Method.
 
 reject_invalid_method(Config) ->
@@ -867,7 +878,7 @@ drop_whitespace_after_header_value(Config) ->
 		"\r\n"
 		"Hello world!"]).
 
-reject_lf_line_breaks(Config) ->
+reject_lf_line_breaks_after_header_value(Config) ->
 	doc("A server may accept header names separated by a single LF, instead of "
 		"CRLF. Cowboy rejects all requests that use LF as separator. (RFC7230 3.5)"),
 	#{code := 400, client := Client} = do_raw(Config, [
@@ -875,6 +886,17 @@ reject_lf_line_breaks(Config) ->
 		"Host: localhost\n"
 		"Transfer-encoding: chunked\r\n"
 		"\r\n"
+		"6\r\nHello \r\n5\r\nworld\r\n1\r\n!\r\n0\r\n\r\n"]),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
+reject_lf_line_breaks_after_headers_block(Config) ->
+	doc("A server may accept header names separated by a single LF, instead of "
+		"CRLF. Cowboy rejects all requests that use LF as separator. (RFC7230 3.5)"),
+	#{code := 400, client := Client} = do_raw(Config, [
+		"POST /echo/read_body HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"Transfer-encoding: chunked\r\n"
+		"\n"
 		"6\r\nHello \r\n5\r\nworld\r\n1\r\n!\r\n0\r\n\r\n"]),
 	{error, closed} = raw_recv(Client, 0, 1000).
 
@@ -1563,6 +1585,15 @@ accept_at_least_1_empty_line_keepalive(Config) ->
 		"\r\n"),
 	{'HTTP/1.1', 200, _, _} = cow_http:parse_status_line(raw_recv_head(Client)),
 	ok.
+
+reject_lf_line_breaks_empty_line(Config) ->
+	#{code := 400, client := Client} = do_raw(Config,
+		"GET / HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"\r\n"
+		%% We send an extra LF that must be rejected.
+		"\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
 
 %skip_request_body_by_closing_connection(Config) ->
 %%A server that doesn't want to read the entire body of a message
