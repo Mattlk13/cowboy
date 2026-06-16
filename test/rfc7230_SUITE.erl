@@ -325,6 +325,15 @@ origin_form_path(Config) ->
 		"Host: localhost\r\n"
 		"\r\n").
 
+origin_form_reject_invalid_path(Config) ->
+	doc("An invalid request target must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
+		"GET /echo\0/path HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
 origin_form_path_query(Config) ->
 	doc("The absolute-path always starts with \"/\" and ends with either \"?\", \"#\" "
 		"or the end of the URI. (RFC3986 3.3)"),
@@ -350,6 +359,15 @@ origin_form_query(Config) ->
 		"GET /echo/qs?key=value HTTP/1.1\r\n"
 		"Host: localhost\r\n"
 		"\r\n").
+
+origin_form_reject_invalid_query(Config) ->
+	doc("An invalid request target must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
+		"GET /echo/qs?key=\0value HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
 
 origin_form_query_fragment(Config) ->
 	doc("The query starts with \"?\" and ends with \"#\" or the end of the URI. (RFC3986 3.4)"),
@@ -386,10 +404,28 @@ absolute_form_case_insensitive_host(Config) ->
 		"Host: LoCaLHOsT\r\n"
 		"\r\n").
 
-absolute_form_reject_unknown_schemes(Config) ->
+absolute_form_reject_unknown_scheme(Config) ->
 	doc("Unknown schemes must be rejected with a 400 status code and the closing of the connection."),
 	#{code := 400, client := Client} = do_raw(Config,
 		"GET bad://localhost/ HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
+absolute_form_reject_invalid_scheme(Config) ->
+	doc("An invalid request target must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
+		"GET ht\0tp://localhost/ HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
+absolute_form_reject_invalid_scheme_delimiter(Config) ->
+	doc("An invalid request target must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
+		"GET http:/\0/localhost/ HTTP/1.1\r\n"
 		"Host: localhost\r\n"
 		"\r\n"),
 	{error, closed} = raw_recv(Client, 0, 1000).
@@ -429,6 +465,15 @@ absolute_form_reject_missing_host_with_path(Config) ->
 		"be rejected with a 400 status code and the closing of the connection. (RFC7230 2.7.1)"),
 	#{code := 400, client := Client} = do_raw(Config,
 		"GET http:/// HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
+absolute_form_reject_invalid_host(Config) ->
+	doc("An invalid request target must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
+		"GET http://local\0host/ HTTP/1.1\r\n"
 		"Host: localhost\r\n"
 		"\r\n"),
 	{error, closed} = raw_recv(Client, 0, 1000).
@@ -491,7 +536,7 @@ absolute_form_limit_host(Config) ->
 		"\r\n"]),
 	{error, closed} = raw_recv(Client, 0, 1000).
 
-absolute_form_invalid_port_0(Config) ->
+absolute_form_reject_invalid_port_0(Config) ->
 	doc("Port number 0 is reserved. The request must be rejected and the connection closed."),
 	#{code := 400, client := Client} = do_raw(Config,
 		"GET http://localhost:0/ HTTP/1.1\r\n"
@@ -499,12 +544,21 @@ absolute_form_invalid_port_0(Config) ->
 		"\r\n"),
 	{error, closed} = raw_recv(Client, 0, 1000).
 
-absolute_form_invalid_port_65536(Config) ->
+absolute_form_reject_invalid_port_65536(Config) ->
 	doc("Port numbers above 65535 are invalid. The request must be rejected "
 		"and the connection closed."),
 	#{code := 400, client := Client} = do_raw(Config,
 		"GET http://localhost:65536/ HTTP/1.1\r\n"
 		"Host: localhost:65536\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
+absolute_form_reject_invalid_port_nul(Config) ->
+	doc("An invalid request target must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
+		"GET http://localhost:80\080/ HTTP/1.1\r\n"
+		"Host: localhost:8080\r\n"
 		"\r\n"),
 	{error, closed} = raw_recv(Client, 0, 1000).
 
@@ -531,6 +585,15 @@ absolute_form_path(Config) ->
 		"Host: localhost\r\n"
 		"\r\n").
 
+absolute_form_reject_invalid_path(Config) ->
+	doc("An invalid request target must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
+		"GET http://localhost/echo\0/path HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
 absolute_form_path_query(Config) ->
 	doc("The path always starts with \"/\" and ends with either \"?\", \"#\" "
 		"or the end of the URI. (RFC3986 3.3)"),
@@ -539,6 +602,15 @@ absolute_form_path_query(Config) ->
 		"GET http://localhost/echo/path?key=value HTTP/1.1\r\n"
 		"Host: localhost\r\n"
 		"\r\n").
+
+absolute_form_reject_invalid_query(Config) ->
+	doc("An invalid request target must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
+		"GET http://localhost/echo/qs?key=\0value HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
 
 absolute_form_path_fragment(Config) ->
 	doc("The path always starts with \"/\" and ends with either \"?\", \"#\" "
@@ -640,11 +712,20 @@ asterisk_form_empty_path_query(Config) ->
 		"X-Echo: uri\r\n"
 		"\r\n").
 
+asterisk_form_reject_invalid(Config) ->
+	doc("An invalid request target must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
+		"OPTIONS *\0 HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
 %% Invalid request-target.
 
-invalid_request_target(Config) ->
-	doc("Any other form is invalid and must be rejected with a 400 status code "
-		"and the closing of the connection."),
+reject_invalid_request_target(Config) ->
+	doc("An invalid request target must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
 	#{code := 400, client := Client} = do_raw(Config,
 		"GET \0 HTTP/1.1\r\n"
 		"Host: localhost\r\n"
@@ -745,20 +826,25 @@ reject_invalid_whitespace_after_version(Config) ->
 
 %% Request headers.
 
-invalid_header_name(Config) ->
-	doc("Header field names are tokens. (RFC7230 3.2)"),
-	#{code := 400} = do_raw(Config, [
+reject_invalid_header_name(Config) ->
+	doc("An invalid header field name must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
 		"GET / HTTP/1.1\r\n"
-		"Host\0: localhost\r\n"
-		"\r\n"]).
+		"Host: localhost\r\n"
+		"X-\0Bad: fooled you\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
 
-invalid_header_value(Config) ->
-	doc("Header field values are made of printable characters, "
-		"horizontal tab or space. (RFC7230 3.2)"),
-	#{code := 400} = do_raw(Config, [
+reject_invalid_header_value(Config) ->
+	doc("An invalid header field value must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
 		"GET / HTTP/1.1\r\n"
-		"Host: localhost\0rm rf the world\r\n"
-		"\r\n"]).
+		"Host: localhost\r\n"
+		"X-Bad: value\0rm rf the world\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
 
 lower_case_header(Config) ->
 	doc("The header field name is case insensitive. (RFC7230 3.2)"),
@@ -1456,7 +1542,37 @@ remove_transfer_encoding_chunked_after_body_read(Config) ->
 %ignore_chunked_headers_if_trailer_not_in_connection(Config) ->
 %The trailer header must be listed in the connection header field.
 %Trailers must be ignored otherwise.
-%
+
+reject_invalid_trailer_name(Config) ->
+	doc("An invalid trailer field name must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
+		"POST /echo/read_body HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"Transfer-Encoding: chunked\r\n"
+		"Trailer: x-bad\r\n"
+		"\r\n"
+		"5\r\nHello\r\n"
+		"0\r\n"
+		"X\0-Bad: v\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
+reject_invalid_trailer_value(Config) ->
+	doc("An invalid trailer field value must be rejected with a 400 status code "
+		"and the closing of the connection. (RFC9110 5.5)"),
+	#{code := 400, client := Client} = do_raw(Config,
+		"POST /echo/read_body HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"Transfer-Encoding: chunked\r\n"
+		"Trailer: x-bad\r\n"
+		"\r\n"
+		"5\r\nHello\r\n"
+		"0\r\n"
+		"X-Bad: val\0ue\r\n"
+		"\r\n"),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
 %%% @todo Though we need a compatibility mode as some clients don't send it...
 %reject_chunked_missing_end_crlf(Config) ->
 %@todo ending CRLF

@@ -604,6 +604,8 @@ parse_uri_authority(<<C, Rest/bits>>, State, Method, SoFar, Remaining) ->
 
 parse_uri_path(<<C, Rest/bits>>, State, Method, Authority, SoFar) ->
 	case C of
+		$\0 -> error_terminate(400, State, {connection_error, protocol_error,
+			'NUL byte is not allowed in the request-target. (RFC7230 3.1.1)'});
 		$\r -> error_terminate(400, State, {connection_error, protocol_error,
 			'The request-target must not be followed by a line break. (RFC7230 3.1.1)'});
 		$\s -> parse_version(Rest, State, Method, Authority, SoFar, <<>>);
@@ -614,6 +616,8 @@ parse_uri_path(<<C, Rest/bits>>, State, Method, Authority, SoFar) ->
 
 parse_uri_query(<<C, Rest/bits>>, State, M, A, P, SoFar) ->
 	case C of
+		$\0 -> error_terminate(400, State, {connection_error, protocol_error,
+			'NUL byte is not allowed in the request-target. (RFC7230 3.1.1)'});
 		$\r -> error_terminate(400, State, {connection_error, protocol_error,
 			'The request-target must not be followed by a line break. (RFC7230 3.1.1)'});
 		$\s -> parse_version(Rest, State, M, A, P, SoFar);
@@ -711,6 +715,10 @@ parse_hd_name(<< C, _/bits >>, State=#state{in_state=PS}, H, _) when ?IS_WS(C) -
 	error_terminate(400, State#state{in_state=PS#ps_header{headers=H}},
 		{connection_error, protocol_error,
 			'Whitespace is not allowed between the header name and the colon. (RFC7230 3.2.4)'});
+parse_hd_name(<< $\0, _/bits >>, State=#state{in_state=PS}, H, _) ->
+	error_terminate(400, State#state{in_state=PS#ps_header{headers=H}},
+		{connection_error, protocol_error,
+			'NUL byte is not allowed in header name. (RFC9110 5.5)'});
 parse_hd_name(<< C, Rest/bits >>, State, H, SoFar) ->
 	?LOWER(parse_hd_name, Rest, State, H, SoFar).
 
@@ -758,6 +766,10 @@ parse_hd_value(<< $\r, $\n, Rest/bits >>, S, Headers0, Name, SoFar) ->
 		Value0 -> Headers0#{Name => << Value0/binary, ", ", Value/binary >>}
 	end,
 	parse_header(Rest, S, Headers);
+parse_hd_value(<< $\0, _/bits >>, S=#state{in_state=PS}, H, _, _) ->
+	error_terminate(400, S#state{in_state=PS#ps_header{headers=H}},
+		{connection_error, protocol_error,
+			'NUL byte is not allowed in header value. (RFC9110 5.5)'});
 parse_hd_value(<< C, Rest/bits >>, S, H, N, SoFar) ->
 	parse_hd_value(Rest, S, H, N, << SoFar/binary, C >>).
 
