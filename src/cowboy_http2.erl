@@ -793,19 +793,40 @@ commands(State=#state{http2_machine=HTTP2Machine}, StreamID,
 	end;
 %% Send an informational response.
 commands(State0, StreamID, [{inform, StatusCode, Headers}|Tail]) ->
-	State1 = send_headers(State0, StreamID, idle, StatusCode, Headers),
-	State = maybe_reset_idle_timeout(State1),
-	commands(State, StreamID, Tail);
+	case maybe_invalid_response_headers(Headers, State0) of
+		error_terminate ->
+			reset_stream(State0, StreamID,
+				{internal_error, invalid_response_header,
+					'An invalid response header was detected in an informational response.'});
+		ok ->
+			State1 = send_headers(State0, StreamID, idle, StatusCode, Headers),
+			State = maybe_reset_idle_timeout(State1),
+			commands(State, StreamID, Tail)
+	end;
 %% Send response headers.
 commands(State0, StreamID, [{response, StatusCode, Headers, Body}|Tail]) ->
-	State1 = send_response(State0, StreamID, StatusCode, Headers, Body),
-	State = maybe_reset_idle_timeout(State1),
-	commands(State, StreamID, Tail);
+	case maybe_invalid_response_headers(Headers, State0) of
+		error_terminate ->
+			reset_stream(State0, StreamID,
+				{internal_error, invalid_response_header,
+					'An invalid response header was detected.'});
+		ok ->
+			State1 = send_response(State0, StreamID, StatusCode, Headers, Body),
+			State = maybe_reset_idle_timeout(State1),
+			commands(State, StreamID, Tail)
+	end;
 %% Send response headers.
 commands(State0, StreamID, [{headers, StatusCode, Headers}|Tail]) ->
-	State1 = send_headers(State0, StreamID, nofin, StatusCode, Headers),
-	State = maybe_reset_idle_timeout(State1),
-	commands(State, StreamID, Tail);
+	case maybe_invalid_response_headers(Headers, State0) of
+		error_terminate ->
+			reset_stream(State0, StreamID,
+				{internal_error, invalid_response_header,
+					'An invalid response header was detected.'});
+		ok ->
+			State1 = send_headers(State0, StreamID, nofin, StatusCode, Headers),
+			State = maybe_reset_idle_timeout(State1),
+			commands(State, StreamID, Tail)
+	end;
 %% Send a response body chunk.
 commands(State0, StreamID, [{data, IsFin, Data}|Tail]) ->
 	State = case maybe_send_data(State0, StreamID, IsFin, Data, []) of
@@ -817,14 +838,21 @@ commands(State0, StreamID, [{data, IsFin, Data}|Tail]) ->
 	commands(State, StreamID, Tail);
 %% Send trailers.
 commands(State0, StreamID, [{trailers, Trailers}|Tail]) ->
-	State = case maybe_send_data(State0, StreamID, fin,
-			{trailers, maps:to_list(Trailers)}, []) of
-		{data_sent, State1} ->
-			maybe_reset_idle_timeout(State1);
-		{no_data_sent, State1} ->
-			State1
-	end,
-	commands(State, StreamID, Tail);
+	case maybe_invalid_response_headers(Trailers, State0) of
+		error_terminate ->
+			reset_stream(State0, StreamID,
+				{internal_error, invalid_response_header,
+					'An invalid response header was detected in trailers.'});
+		ok ->
+			State = case maybe_send_data(State0, StreamID, fin,
+					{trailers, maps:to_list(Trailers)}, []) of
+				{data_sent, State1} ->
+					maybe_reset_idle_timeout(State1);
+				{no_data_sent, State1} ->
+					State1
+			end,
+			commands(State, StreamID, Tail)
+	end;
 %% Send a push promise.
 %%
 %% @todo Responses sent as a result of a push_promise request
@@ -834,36 +862,43 @@ commands(State0, StreamID, [{trailers, Trailers}|Tail]) ->
 %% in the closing http2_status.
 commands(State0=#state{socket=Socket, transport=Transport, http2_machine=HTTP2Machine0},
 		StreamID, [{push, Method, Scheme, Host, Port, Path, Qs, Headers0}|Tail]) ->
-	Authority = case {Scheme, Port} of
-		{<<"http">>, 80} -> Host;
-		{<<"https">>, 443} -> Host;
-		_ -> iolist_to_binary([Host, $:, integer_to_binary(Port)])
-	end,
-	PathWithQs = iolist_to_binary(case Qs of
-		<<>> -> Path;
-		_ -> [Path, $?, Qs]
-	end),
-	PseudoHeaders = #{
-		method => Method,
-		scheme => Scheme,
-		authority => Authority,
-		path => PathWithQs
-	},
-	%% We need to make sure the header value is binary before we can
-	%% create the Req object, as it expects them to be flat.
-	Headers = maps:to_list(maps:map(fun(_, V) -> iolist_to_binary(V) end, Headers0)),
-	State = case cow_http2_machine:prepare_push_promise(StreamID, HTTP2Machine0,
-			PseudoHeaders, Headers) of
-		{ok, PromisedStreamID, HeaderBlock, HTTP2Machine} ->
-			State1 = State0#state{http2_machine=HTTP2Machine},
-			ok = maybe_socket_error(State1, Transport:send(Socket,
-				cow_http2:push_promise(StreamID, PromisedStreamID, HeaderBlock))),
-			State2 = maybe_reset_idle_timeout(State1),
-			headers_frame(State2, PromisedStreamID, fin, Headers, PseudoHeaders, 0);
-		{error, no_push} ->
-			State0
-	end,
-	commands(State, StreamID, Tail);
+	case maybe_invalid_response_headers(Headers0, State0) of
+		error_terminate ->
+			reset_stream(State0, StreamID,
+				{internal_error, invalid_response_header,
+					'An invalid response header was detected in push promise.'});
+		ok ->
+			Authority = case {Scheme, Port} of
+				{<<"http">>, 80} -> Host;
+				{<<"https">>, 443} -> Host;
+				_ -> iolist_to_binary([Host, $:, integer_to_binary(Port)])
+			end,
+			PathWithQs = iolist_to_binary(case Qs of
+				<<>> -> Path;
+				_ -> [Path, $?, Qs]
+			end),
+			PseudoHeaders = #{
+				method => Method,
+				scheme => Scheme,
+				authority => Authority,
+				path => PathWithQs
+			},
+			%% We need to make sure the header value is binary before we can
+			%% create the Req object, as it expects them to be flat.
+			Headers = maps:to_list(maps:map(fun(_, V) -> iolist_to_binary(V) end, Headers0)),
+			State = case cow_http2_machine:prepare_push_promise(StreamID, HTTP2Machine0,
+					PseudoHeaders, Headers) of
+				{ok, PromisedStreamID, HeaderBlock, HTTP2Machine} ->
+					State1 = State0#state{http2_machine=HTTP2Machine},
+					ok = maybe_socket_error(State1, Transport:send(Socket,
+						cow_http2:push_promise(StreamID, PromisedStreamID, HeaderBlock))),
+					State2 = maybe_reset_idle_timeout(State1),
+					headers_frame(State2, PromisedStreamID, fin, Headers, PseudoHeaders, 0);
+				{error, no_push} ->
+					State0
+			end,
+			commands(State, StreamID, Tail)
+	end;
 %% Read the request body.
 commands(State0=#state{flow=Flow, streams=Streams}, StreamID, [{flow, Size}|Tail]) ->
 	#{StreamID := Stream=#stream{flow=StreamFlow}} = Streams,
@@ -887,10 +922,17 @@ commands(State, StreamID, [Error = {internal_error, _, _}|_Tail]) ->
 %% hasn't been set yet. This is called from init/12.
 commands(State=#state{socket=Socket, transport=Transport, http2_status=upgrade},
 		StreamID, [{switch_protocol, Headers, ?MODULE, _}|Tail]) ->
-	%% @todo This 101 response needs to be passed through stream handlers.
-	ok = maybe_socket_error(State, Transport:send(Socket,
-		cow_http:response(101, 'HTTP/1.1', maps:to_list(Headers)))),
-	commands(State, StreamID, Tail);
+	case maybe_invalid_response_headers(Headers, State) of
+		error_terminate ->
+			reset_stream(State, StreamID,
+				{internal_error, invalid_response_header,
+					'An invalid response header was detected when upgrading to HTTP/2.'});
+		ok ->
+			%% @todo This 101 response needs to be passed through stream handlers.
+			ok = maybe_socket_error(State, Transport:send(Socket,
+				cow_http:response(101, 'HTTP/1.1', maps:to_list(Headers)))),
+			commands(State, StreamID, Tail)
+	end;
 %% Use a different protocol within the stream (CONNECT :protocol).
 %% @todo Make sure we error out when the feature is disabled.
 %% There are two data_delivery: stream_handlers and relay.
@@ -903,19 +945,33 @@ commands(State=#state{socket=Socket, transport=Transport, http2_status=upgrade},
 %%       before processing the response.
 commands(State0=#state{flow=Flow, streams=Streams}, StreamID,
 		[{switch_protocol, Headers, _Mod, ModState=#{data_delivery := relay}}|Tail]) ->
-	State1 = info(State0, StreamID, {headers, 200, Headers}),
-	#{StreamID := Stream} = Streams,
-	#{data_delivery_pid := RelayPid} = ModState,
-	%% WINDOW_UPDATE frames updating the window will be sent after
-	%% the first DATA frame has been received.
-	RelayFlow = maps:get(data_delivery_flow, ModState, 131072),
-	State = State1#state{flow=Flow + RelayFlow, streams=Streams#{StreamID => Stream#stream{
-		status={relaying, RelayFlow, RelayPid},
-		flow=RelayFlow}}},
-	commands(State, StreamID, Tail);
+	case maybe_invalid_response_headers(Headers, State0) of
+		error_terminate ->
+			reset_stream(State0, StreamID,
+				{internal_error, invalid_response_header,
+					'An invalid response header was detected when switching protocols.'});
+		ok ->
+			State1 = info(State0, StreamID, {headers, 200, Headers}),
+			#{StreamID := Stream} = Streams,
+			#{data_delivery_pid := RelayPid} = ModState,
+			%% WINDOW_UPDATE frames updating the window will be sent after
+			%% the first DATA frame has been received.
+			RelayFlow = maps:get(data_delivery_flow, ModState, 131072),
+			State = State1#state{flow=Flow + RelayFlow, streams=Streams#{StreamID => Stream#stream{
+				status={relaying, RelayFlow, RelayPid},
+				flow=RelayFlow}}},
+			commands(State, StreamID, Tail)
+	end;
 commands(State0, StreamID, [{switch_protocol, Headers, _Mod, _ModState}|Tail]) ->
-	State = info(State0, StreamID, {headers, 200, Headers}),
-	commands(State, StreamID, Tail);
+	case maybe_invalid_response_headers(Headers, State0) of
+		error_terminate ->
+			reset_stream(State0, StreamID,
+				{internal_error, invalid_response_header,
+					'An invalid response header was detected when switching protocols.'});
+		ok ->
+			State = info(State0, StreamID, {headers, 200, Headers}),
+			commands(State, StreamID, Tail)
+	end;
 %% Set options dynamically.
 commands(State, StreamID, [{set_options, _Opts}|Tail]) ->
 	commands(State, StreamID, Tail);
@@ -1017,6 +1073,9 @@ headers_to_list(Headers0=#{<<"set-cookie">> := SetCookies}) ->
 	Headers ++ [{<<"set-cookie">>, Value} || Value <- SetCookies];
 headers_to_list(Headers) ->
 	maps:to_list(Headers).
+
+maybe_invalid_response_headers(Headers, #state{opts=Opts}) ->
+	cowboy_http:validate_response_headers(Headers, Opts).
 
 maybe_send_data(State0=#state{socket=Socket, transport=Transport,
 		http2_machine=HTTP2Machine0}, StreamID, IsFin, Data0, Prefix) ->

@@ -35,7 +35,11 @@ init(Req0, Opts) ->
 			Req = cowboy_req:reply(200, #{}, <<"OK">>, Req0),
 			{ok, Req, Opts};
 		<<"/switch_protocol">> ->
-			{resp_invalid_headers_h, Req0, Opts}
+			{resp_invalid_headers_h, Req0, Opts};
+		<<"/push">> ->
+			cowboy_req:push("/static/style.css", #{<<"x-test">> => <<"bad\r\nvalue">>}, Req0),
+			Req = cowboy_req:reply(200, Req0),
+			{ok, Req, Opts}
 	end.
 
 upgrade(Req=#{pid := Pid, streamid := StreamID}, Env, _Handler, _State) ->

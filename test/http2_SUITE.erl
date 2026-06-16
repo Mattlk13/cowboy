@@ -30,7 +30,13 @@ init_dispatch(_) ->
 		{"/", hello_h, []},
 		{"/echo/:key", echo_h, []},
 		{"/resp_iolist_body", resp_iolist_body_h, []},
-		{"/streamed_result/:n/:interval", streamed_result_h, []}
+		{"/streamed_result/:n/:interval", streamed_result_h, []},
+		{"/inform", resp_invalid_headers_h, []},
+		{"/reply", resp_invalid_headers_h, []},
+		{"/stream_reply", resp_invalid_headers_h, []},
+		{"/stream_trailers", resp_invalid_headers_h, []},
+		{"/switch_protocol", resp_invalid_headers_h, []},
+		{"/push", resp_invalid_headers_h, []}
 	]}]).
 
 %% Do a prior knowledge handshake (function originally copied from rfc7540_SUITE).
@@ -186,6 +192,225 @@ initial_connection_window_size(Config) ->
 		{ok, <<4:24, 8:8, 0:41, Size:31>>} = gen_tcp:recv(Socket, 13, 1000),
 		ConfiguredSize = Size + 65535,
 		gen_tcp:close(Socket)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_inform(Config) ->
+	doc("Ensure invalid response headers are rejected by default."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)}
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/inform"),
+		{error,{stream_error,{stream_error,internal_error,_}}}
+			= gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_inform_ignore(Config) ->
+	doc("Ensure invalid response headers are sent "
+		"when allowed by configuration."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)},
+		invalid_response_headers => ignore
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/inform"),
+		{inform, 100, _} = gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_reply(Config) ->
+	doc("Ensure invalid response headers are rejected by default."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)}
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/reply"),
+		{error,{stream_error,{stream_error,internal_error,_}}}
+			= gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_reply_ignore(Config) ->
+	doc("Ensure invalid response headers are sent "
+		"when allowed by configuration."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)},
+		invalid_response_headers => ignore
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/reply"),
+		{response, _, 200, _} = gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_stream_reply(Config) ->
+	doc("Ensure invalid response headers are rejected by default."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)},
+		invalid_response_headers => error_terminate
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/stream_reply"),
+		{error,{stream_error,{stream_error,internal_error,_}}}
+			= gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_stream_reply_ignore(Config) ->
+	doc("Ensure invalid response headers are sent "
+		"when allowed by configuration."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)},
+		invalid_response_headers => ignore
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/stream_reply"),
+		{response, _, _, _} = gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_stream_trailers(Config) ->
+	doc("Ensure invalid response headers are rejected by default."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)},
+		invalid_response_headers => error_terminate
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/stream_trailers", #{
+			<<"te">> => <<"trailers">>
+		}),
+		{response, nofin, 200, _} = gun:await(ConnPid, StreamRef),
+		{error,{stream_error,{stream_error,internal_error,_}}}
+			= gun:await_body(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_stream_trailers_ignore(Config) ->
+	doc("Ensure invalid response headers are sent "
+		"when allowed by configuration."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)},
+		invalid_response_headers => ignore
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/stream_trailers", #{
+			<<"te">> => <<"trailers">>
+		}),
+		{response, nofin, 200, _} = gun:await(ConnPid, StreamRef),
+		{ok, <<"OK">>, [{<<"x-test">>, _}]} = gun:await_body(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_switch_protocol(Config) ->
+	doc("Ensure invalid response headers are rejected by default."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)}
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/switch_protocol"),
+		{error,{stream_error,{stream_error,internal_error,_}}}
+			= gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_switch_protocol_ignore(Config) ->
+	doc("Ensure invalid response headers are sent "
+		"when allowed by configuration."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)},
+		invalid_response_headers => ignore
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/switch_protocol"),
+		{response, _, 200, _} = gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_push(Config) ->
+	doc("Ensure invalid response headers in push are rejected by default."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)}
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/push"),
+		{error,{stream_error,{stream_error,internal_error,_}}}
+			= gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_push_ignore(Config) ->
+	doc("Ensure invalid response headers in push are sent "
+		"when allowed by configuration."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)},
+		invalid_response_headers => ignore
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:get(ConnPid, "/push"),
+		{push, _, _, _, _} = gun:await(ConnPid, StreamRef),
+		{response, _, 200, _} = gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
 	after
 		cowboy:stop_listener(?FUNCTION_NAME)
 	end.

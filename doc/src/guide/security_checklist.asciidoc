@@ -229,11 +229,11 @@ status, header names, header values (with values appropriate
 for the header name) as well as trailer headers, multipart
 headers and any other media type used in the response body:
 
-* The HTTP/1.1 option `invalid_response_headers` provides
-  only limited protection for the HTTP/1.1 protocol. It is
-  enabled by default and *SHOULD NOT* be disabled. There is
-  no equivalent for HTTP/2 or HTTP/3. Applications *MUST*
-  still follow the recommendations in this section.
+* The HTTP/1.1 and HTTP/2 options `invalid_response_headers`
+  provide only limited protection for the HTTP/1.1 and HTTP/2
+  protocols. They are enabled by default and *SHOULD NOT* be
+  disabled. Applications *MUST* still follow the recommendations
+  in this section.
 
 * Response status *MUST* be a literal value, especially
   when providing a binary for the status line. Calls to

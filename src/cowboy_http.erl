@@ -19,6 +19,9 @@
 -export([init/6]).
 -export([loop/1]).
 
+%% Shared with other HTTP versions.
+-export([validate_response_headers/2]).
+
 -export([system_continue/3]).
 -export([system_terminate/4]).
 -export([system_code_change/4]).
@@ -1394,26 +1397,35 @@ commands(State, StreamID, [{push, _, _, _, _, _, _, _}|Tail]) ->
 	commands(State, StreamID, Tail).
 
 maybe_invalid_response_headers(Headers, #state{opts=Opts}) ->
+	validate_response_headers(Headers, Opts).
+
+-spec validate_response_headers(cowboy:http_headers(),
+		#{invalid_response_headers => error_terminate | ignore})
+	-> ok | error_terminate.
+
+%% @todo This function is common to all HTTP versions.
+
+validate_response_headers(Headers, Opts) ->
 	case maps:get(invalid_response_headers, Opts, error_terminate) of
 		error_terminate ->
 			It = maps:iterator(Headers),
-			maybe_invalid_response_headers(maps:next(It));
+			validate_response_headers(maps:next(It));
 		ignore ->
 			ok
 	end.
 
-maybe_invalid_response_headers({_, V, It}) when is_binary(V) ->
+validate_response_headers({_, V, It}) when is_binary(V) ->
 	case binary:match(V, [<<$\r>>, <<$\n>>]) of
 		nomatch ->
-			maybe_invalid_response_headers(maps:next(It));
+			validate_response_headers(maps:next(It));
 		_ ->
 			error_terminate
 	end;
-maybe_invalid_response_headers({K, V, It}) ->
+validate_response_headers({K, V, It}) ->
 	%% We build a temporary binary for simplicity's sake
 	%% when we have a list/iolist.
-	maybe_invalid_response_headers({K, iolist_to_binary(V), It});
-maybe_invalid_response_headers(none) ->
+	validate_response_headers({K, iolist_to_binary(V), It});
+validate_response_headers(none) ->
 	ok.
 
 %% The set-cookie header is special; we can only send one cookie per header.
