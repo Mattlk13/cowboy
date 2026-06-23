@@ -287,7 +287,7 @@ the client.
 This option can be updated at any time using the
 `set_options` command.
 
-max_frame_size (infinity)::
+max_frame_size (1MB)::
 
 Maximum frame size in bytes allowed by this Websocket
 handler. Cowboy will close the connection when
@@ -317,6 +317,7 @@ normal circumstances if necessary.
 
 == Changelog
 
+* *2.17*: The `max_frame_size` option now defaults to 1MB.
 * *2.14*: The `data_delivery` and `data_delivery_flow` options
           were added. The `relay` data delivery mechanism
           provides a better way of forwarding data to

@@ -226,9 +226,9 @@ This value cannot be changed once it is set. It defaults to
 
 === Limiting frame sizes
 
-Cowboy accepts frames of any size by default. You should
-limit the size depending on what your handler may handle.
-You can do this via the `init/2` callback:
+Cowboy accepts frames of up to 1MB in size by default.
+You should limit the size depending on what your handler
+may handle. You can do this via the `init/2` callback:
 
 [source,erlang]
 ----

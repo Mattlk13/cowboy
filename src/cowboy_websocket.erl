@@ -81,6 +81,8 @@
 }.
 -export_type([opts/0]).
 
+-define(MAX_FRAME_SIZE_DEFAULT, 1000000).
+
 %% We don't want to reset the idle timeout too often,
 %% so we don't reset it on data. Instead we reset the
 %% number of ticks we have observed. We divide the
@@ -519,7 +521,7 @@ parse(State, HandlerState, PS=#ps_payload{buffer=Buffer}, Data) ->
 
 parse_header(State=#state{opts=Opts, frag_state=FragState, extensions=Extensions},
 		HandlerState, ParseState=#ps_header{buffer=Data}) ->
-	MaxFrameSize = maps:get(max_frame_size, Opts, infinity),
+	MaxFrameSize = maps:get(max_frame_size, Opts, ?MAX_FRAME_SIZE_DEFAULT),
 	case cow_ws:parse_header(Data, Extensions, FragState) of
 		%% All frames sent from the client to the server are masked.
 		{_, _, _, _, undefined, _} ->
@@ -539,7 +541,7 @@ parse_payload(State=#state{opts=Opts, frag_state=FragState, utf8_state=Incomplet
 		HandlerState, ParseState=#ps_payload{
 			type=Type, len=Len, mask_key=MaskKey, rsv=Rsv,
 			unmasked=Unmasked, unmasked_len=UnmaskedLen}, Data) ->
-	MaxFrameSize = case maps:get(max_frame_size, Opts, infinity) of
+	MaxFrameSize = case maps:get(max_frame_size, Opts, ?MAX_FRAME_SIZE_DEFAULT) of
 		infinity -> infinity;
 		MaxFrameSize0 -> MaxFrameSize0 - UnmaskedLen
 	end,
@@ -569,7 +571,7 @@ parse_payload(State=#state{opts=Opts, frag_state=FragState, utf8_state=Incomplet
 
 dispatch_frame(State=#state{opts=Opts, frag_state=FragState, frag_buffer=SoFar}, HandlerState,
 		#ps_payload{type=Type0, unmasked=Payload0, close_code=CloseCode0}, RemainingData) ->
-	MaxFrameSize = maps:get(max_frame_size, Opts, infinity),
+	MaxFrameSize = maps:get(max_frame_size, Opts, ?MAX_FRAME_SIZE_DEFAULT),
 	case cow_ws:make_frame(Type0, Payload0, CloseCode0, FragState) of
 		%% @todo Allow receiving fragments.
 		{fragment, _, _, Payload} when byte_size(Payload) + byte_size(SoFar) > MaxFrameSize ->

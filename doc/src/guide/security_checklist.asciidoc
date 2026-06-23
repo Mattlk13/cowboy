@@ -88,12 +88,9 @@ vulnerable to memory exhaustion attacks:
 
 * Many `cowboy_websocket` options may be unsafe if the value
   configured is too large: `active_n`, `data_delivery_flow`,
-  `dynamic_buffer` and `max_frame_size`. Note
-  that the default `max_frame_size` is `infinity`. Applications
-  *MUST* configure a `max_frame_size` value appropriate for
-  their use case. Note that the `max_frame_size`
-  option may be changed dynamically via the `set_options`
-  command.
+  `dynamic_buffer` and `max_frame_size`. Note that the
+  `max_frame_size` option may be changed dynamically via
+  the `set_options` command.
 
 * Websocket and loop handlers may run for a very long time,
   be mindful of how much memory the handlers may be using.
