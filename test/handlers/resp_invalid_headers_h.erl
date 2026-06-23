@@ -5,6 +5,7 @@
 
 -export([init/2]).
 -export([upgrade/4]).
+-export([takeover/7]).
 
 init(Req0, Opts) ->
 	case cowboy_req:path(Req0) of
@@ -46,3 +47,7 @@ upgrade(Req=#{pid := Pid, streamid := StreamID}, Env, _Handler, _State) ->
 	Headers = #{<<"x-test">> => <<"bad\r\nvalue">>},
 	Pid ! {{Pid, StreamID}, {switch_protocol, Headers, ?MODULE, undefined}},
 	{ok, Req, Env}.
+
+takeover(_, invalid_response_headers_switch_protocol_ignore,
+		_, _, _, _, undefined) ->
+	exit({shutdown, expected}).

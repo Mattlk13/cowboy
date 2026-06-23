@@ -225,7 +225,9 @@ invalid_response_headers_inform_ignore(Config) ->
 		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
 		{ok, http2} = gun:await_up(ConnPid),
 		StreamRef = gun:get(ConnPid, "/inform"),
-		{inform, 100, _} = gun:await(ConnPid, StreamRef),
+		%% Gun rejects invalid response headers with a protocol_error stream error.
+		{error,{stream_error,{stream_error,protocol_error,_}}}
+			= gun:await(ConnPid, StreamRef),
 		gun:close(ConnPid)
 	after
 		cowboy:stop_listener(?FUNCTION_NAME)
@@ -260,7 +262,9 @@ invalid_response_headers_reply_ignore(Config) ->
 		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
 		{ok, http2} = gun:await_up(ConnPid),
 		StreamRef = gun:get(ConnPid, "/reply"),
-		{response, _, 200, _} = gun:await(ConnPid, StreamRef),
+		%% Gun rejects invalid response headers with a protocol_error stream error.
+		{error,{stream_error,{stream_error,protocol_error,_}}}
+			= gun:await(ConnPid, StreamRef),
 		gun:close(ConnPid)
 	after
 		cowboy:stop_listener(?FUNCTION_NAME)
@@ -296,7 +300,9 @@ invalid_response_headers_stream_reply_ignore(Config) ->
 		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
 		{ok, http2} = gun:await_up(ConnPid),
 		StreamRef = gun:get(ConnPid, "/stream_reply"),
-		{response, _, _, _} = gun:await(ConnPid, StreamRef),
+		%% Gun rejects invalid response headers with a protocol_error stream error.
+		{error,{stream_error,{stream_error,protocol_error,_}}}
+			= gun:await(ConnPid, StreamRef),
 		gun:close(ConnPid)
 	after
 		cowboy:stop_listener(?FUNCTION_NAME)
@@ -338,7 +344,9 @@ invalid_response_headers_stream_trailers_ignore(Config) ->
 			<<"te">> => <<"trailers">>
 		}),
 		{response, nofin, 200, _} = gun:await(ConnPid, StreamRef),
-		{ok, <<"OK">>, [{<<"x-test">>, _}]} = gun:await_body(ConnPid, StreamRef),
+		%% Gun rejects invalid response headers with a protocol_error stream error.
+		{error,{stream_error,{stream_error,protocol_error,_}}}
+			= gun:await_body(ConnPid, StreamRef),
 		gun:close(ConnPid)
 	after
 		cowboy:stop_listener(?FUNCTION_NAME)
@@ -373,7 +381,9 @@ invalid_response_headers_switch_protocol_ignore(Config) ->
 		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
 		{ok, http2} = gun:await_up(ConnPid),
 		StreamRef = gun:get(ConnPid, "/switch_protocol"),
-		{response, _, 200, _} = gun:await(ConnPid, StreamRef),
+		%% Gun rejects invalid response headers with a protocol_error stream error.
+		{error,{stream_error,{stream_error,protocol_error,_}}}
+			= gun:await(ConnPid, StreamRef),
 		gun:close(ConnPid)
 	after
 		cowboy:stop_listener(?FUNCTION_NAME)
@@ -408,7 +418,8 @@ invalid_response_headers_push_ignore(Config) ->
 		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
 		{ok, http2} = gun:await_up(ConnPid),
 		StreamRef = gun:get(ConnPid, "/push"),
-		{push, _, _, _, _} = gun:await(ConnPid, StreamRef),
+		%% The pushed response doesn't go through because
+		%% Gun rejects it as a protocol error.
 		{response, _, 200, _} = gun:await(ConnPid, StreamRef),
 		gun:close(ConnPid)
 	after
