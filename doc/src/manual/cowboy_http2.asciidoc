@@ -185,7 +185,7 @@ number of streams that the peer can reset over a certain time period.
 The rate is expressed as a tuple `{NumCancels, TimeMs}`. This is
 similar to a supervisor restart intensity/period.
 
-max_concurrent_streams (infinity)::
+max_concurrent_streams (100)::
 
 Maximum number of concurrent streams allowed on the connection.
 
@@ -334,6 +334,7 @@ too many `WINDOW_UPDATE` frames.
 
 == Changelog
 
+* *2.17*: The `max_concurrent_streams` option now defaults to 100.
 * *2.17*: The `max_authority_length` option was added.
 * *2.16*: The `max_headers` option was added.
 * *2.13*: The `inactivity_timeout` option was deprecated.

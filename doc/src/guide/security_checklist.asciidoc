@@ -84,10 +84,7 @@ vulnerable to memory exhaustion attacks:
   `max_encode_table_size`, `max_fragmented_header_block_size`,
   `max_frame_size_received`, `max_headers`, `max_stream_buffer_size`,
   `max_stream_window_size`, `stream_window_margin_size`
-  and `stream_window_update_threshold`. Note that the
-  default `max_concurrent_streams` is `infinity`.
-  Applications *MUST* configure a `max_concurrent_streams` value
-  appropriate for their use case.
+  and `stream_window_update_threshold`.
 
 * Many `cowboy_websocket` options may be unsafe if the value
   configured is too large: `active_n`, `data_delivery_flow`,
