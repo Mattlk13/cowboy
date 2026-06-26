@@ -1640,31 +1640,43 @@ error_terminate(StatusCode, State=#state{ref=Ref, peer=Peer, in_state=StreamStat
 early_error(StatusCode, State, Reason, PartialReq) ->
 	early_error(StatusCode, State, Reason, PartialReq, #{}).
 
-early_error(StatusCode0, State=#state{socket=Socket, transport=Transport,
-		opts=Opts, in_streamid=StreamID}, Reason, PartialReq, RespHeaders0) ->
+early_error(StatusCode, State=#state{opts=Opts, in_streamid=StreamID},
+		Reason, PartialReq, RespHeaders0) ->
 	RespHeaders1 = RespHeaders0#{<<"content-length">> => <<"0">>},
-	Resp = {response, StatusCode0, RespHeaders1, <<>>},
-	try cowboy_stream:early_error(StreamID, Reason, PartialReq, Resp, Opts) of
-		{response, StatusCode, RespHeaders, RespBody} ->
-			ok = maybe_socket_error(State,
-				Transport:send(Socket, [
-					cow_http:response(StatusCode, 'HTTP/1.1', maps:to_list(RespHeaders)),
-					%% @todo We shouldn't send the body when the method is HEAD.
-					%% @todo Technically we allow the sendfile tuple.
-					RespBody
-				])
-			)
+	Resp0 = {response, StatusCode, RespHeaders1, <<>>},
+	try cowboy_stream:early_error(StreamID, Reason, PartialReq, Resp0, Opts) of
+		Resp = {response, _, RespHeaders, _} ->
+			case maybe_invalid_response_headers(RespHeaders, State) of
+				error_terminate ->
+					%% We still need to send an error response, so send what we
+					%% initially wanted to send. It's better than nothing.
+					early_error_resp(Resp0, State),
+					Reason1 = {internal_error, invalid_response_header,
+						'An invalid response header was detected.'},
+					terminate(State, Reason1);
+				ok ->
+					ok
+			end,
+			%% @todo We shouldn't send the body when the method is HEAD.
+			%% @todo Technically we allow the sendfile tuple.
+			early_error_resp(Resp, State)
 	catch Class:Exception:Stacktrace ->
 		cowboy:log(cowboy_stream:make_error_log(early_error,
-			[StreamID, Reason, PartialReq, Resp, Opts],
+			[StreamID, Reason, PartialReq, Resp0, Opts],
 			Class, Exception, Stacktrace), Opts),
-		%% We still need to send an error response, so send what we initially
-		%% wanted to send. It's better than nothing.
-		ok = maybe_socket_error(State,
-			Transport:send(Socket, cow_http:response(StatusCode0,
-				'HTTP/1.1', maps:to_list(RespHeaders1)))
-		)
+		%% We still need to send an error response, so send what we
+		%% initially wanted to send. It's better than nothing.
+		early_error_resp(Resp0, State)
 	end.
+
+early_error_resp({response, StatusCode, RespHeaders, RespBody},
+		State=#state{socket=Socket, transport=Transport}) ->
+	ok = maybe_socket_error(State,
+		Transport:send(Socket, [
+			cow_http:response(StatusCode, 'HTTP/1.1', maps:to_list(RespHeaders)),
+			RespBody
+		])
+	).
 
 initiate_closing(State=#state{streams=[]}, Reason) ->
 	terminate(State, Reason);

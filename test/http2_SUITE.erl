@@ -426,6 +426,45 @@ invalid_response_headers_push_ignore(Config) ->
 		cowboy:stop_listener(?FUNCTION_NAME)
 	end.
 
+invalid_response_headers_early_error(Config) ->
+	doc("Ensure invalid response headers are rejected by default."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)},
+		stream_handlers => [stream_handler_invalid_headers_h]
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:headers(ConnPid, "TRACE", "/", []),
+		{error,{stream_error,{stream_error,internal_error,_}}}
+			= gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_early_error_ignore(Config) ->
+	doc("Ensure invalid response headers are sent "
+		"when allowed by configuration."),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => init_dispatch(Config)},
+		invalid_response_headers => ignore,
+		stream_handlers => [stream_handler_invalid_headers_h]
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		ConnPid = gun_open([{type, tcp}, {protocol, http2}, {port, Port}|Config]),
+		{ok, http2} = gun:await_up(ConnPid),
+		StreamRef = gun:headers(ConnPid, "TRACE", "/", []),
+		%% Gun rejects invalid response headers with a protocol_error stream error.
+		{error,{stream_error,{stream_error,protocol_error,_}}}
+			= gun:await(ConnPid, StreamRef),
+		gun:close(ConnPid)
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
 max_authority_length_authority_pseudo_header(Config0) ->
 	doc("Confirm the max_authority_length option correctly limits "
 		"the length of the authority component in the :authority pseudo-header."),

@@ -714,6 +714,48 @@ invalid_response_headers_switch_protocol_ignore(Config) ->
 		cowboy:stop_listener(?FUNCTION_NAME)
 	end.
 
+invalid_response_headers_early_error(Config) ->
+	doc("Ensure invalid response headers are rejected by default."),
+	Dispatch = cowboy_router:compile([{'_', []}]),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => Dispatch},
+		stream_handlers => [stream_handler_invalid_headers_h]
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		Request = "TRACE / HTTP/1.1\r\nhost: localhost\r\n\r\n",
+		Client = raw_open([{type, tcp}, {port, Port}, {opts, []}|Config]),
+		ok = raw_send(Client, Request),
+		%% We sent the initial response, ignoring the
+		%% modified response from stream handlers.
+		{'HTTP/1.1', 501, _, Rest} = cow_http:parse_status_line(raw_recv_head(Client)),
+		{_, _} = cow_http:parse_headers(Rest),
+		ok
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
+invalid_response_headers_early_error_ignore(Config) ->
+	doc("Ensure invalid response headers are sent "
+		"when allowed by configuration."),
+	Dispatch = cowboy_router:compile([{'_', []}]),
+	{ok, _} = cowboy:start_clear(?FUNCTION_NAME, [{port, 0}], #{
+		env => #{dispatch => Dispatch},
+		invalid_response_headers => ignore,
+		stream_handlers => [stream_handler_invalid_headers_h]
+	}),
+	Port = ranch:get_port(?FUNCTION_NAME),
+	try
+		Request = "TRACE /switch_protocol HTTP/1.1\r\nhost: localhost\r\n\r\n",
+		Client = raw_open([{type, tcp}, {port, Port}, {opts, []}|Config]),
+		ok = raw_send(Client, Request),
+		{'HTTP/1.1', 501, _, Rest} = cow_http:parse_status_line(raw_recv_head(Client)),
+		?assertError(function_clause, cow_http:parse_headers(Rest),
+			"Invalid header goes through.")
+	after
+		cowboy:stop_listener(?FUNCTION_NAME)
+	end.
+
 max_authority_length_host_header(Config) ->
 	doc("Confirm the max_authority_length option correctly limits "
 		"the length of the authority component in the host header."),

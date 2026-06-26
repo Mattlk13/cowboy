@@ -673,7 +673,14 @@ early_error(State0=#state{ref=Ref, opts=Opts, peer=Peer},
 	Resp = {response, StatusCode0, RespHeaders0, <<>>},
 	try cowboy_stream:early_error(StreamID, Reason, PartialReq, Resp, Opts) of
 		{response, StatusCode, RespHeaders, RespBody} ->
-			send_response(State0, StreamID, StatusCode, RespHeaders, RespBody)
+			case maybe_invalid_response_headers(RespHeaders, State0) of
+				error_terminate ->
+					reset_stream(State0, StreamID,
+						{internal_error, invalid_response_header,
+							'An invalid response header was detected.'});
+				ok ->
+					send_response(State0, StreamID, StatusCode, RespHeaders, RespBody)
+			end
 	catch Class:Exception:Stacktrace ->
 		cowboy:log(cowboy_stream:make_error_log(early_error,
 			[StreamID, Reason, PartialReq, Resp, Opts],
