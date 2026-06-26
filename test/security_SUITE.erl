@@ -386,9 +386,7 @@ do_nc(Config, Input) ->
 			{skip, "The nc executable was not found."};
 		_ ->
 			StrPort = integer_to_list(config(port, Config)),
-			_ = [
-				os:cmd("cat " ++ Input ++ " | nc localhost " ++ StrPort)
-			|| _ <- lists:seq(1, 100)],
+			os:cmd("cat " ++ Input ++ " | nc localhost " ++ StrPort),
 			ConnPid = gun_open(Config),
 			Ref = gun:get(ConnPid, "/"),
 			{response, _, 200, _} = gun:await(ConnPid, Ref),
