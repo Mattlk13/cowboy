@@ -715,6 +715,11 @@ parse_hd_name(<< C, _/bits >>, State=#state{in_state=PS}, H, _) when ?IS_WS(C) -
 	error_terminate(400, State#state{in_state=PS#ps_header{headers=H}},
 		{connection_error, protocol_error,
 			'Whitespace is not allowed between the header name and the colon. (RFC7230 3.2.4)'});
+parse_hd_name(<< C, _/bits >>, State=#state{in_state=PS}, H, _)
+		when C =:= $\r; C =:= $\n ->
+	error_terminate(400, State#state{in_state=PS#ps_header{headers=H}},
+		{connection_error, protocol_error,
+			'A header line is missing a colon separator. (RFC7230 3.2.4)'});
 parse_hd_name(<< $\0, _/bits >>, State=#state{in_state=PS}, H, _) ->
 	error_terminate(400, State#state{in_state=PS#ps_header{headers=H}},
 		{connection_error, protocol_error,

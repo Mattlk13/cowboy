@@ -916,7 +916,12 @@ reject_header_name_without_colon(Config) ->
 		"Host\r\n"
 		" : localhost\r\n"
 		"\r\n"]),
-	{error, closed} = raw_recv(Client3, 0, 1000).
+	#{code := 400, client := Client4} = do_raw(Config, [
+		"GET / HTTP/1.1\r\n"
+		"Content-Encoding\r\nX-Invalid: hello\r\n"
+		"Host: localhost\r\n"
+		"\r\n"]),
+	{error, closed} = raw_recv(Client4, 0, 1000).
 
 limit_header_name(Config) ->
 	doc("The header name must be subject to a configurable limit. A "
