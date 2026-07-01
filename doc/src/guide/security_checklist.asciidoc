@@ -99,6 +99,12 @@ vulnerable to memory exhaustion attacks:
   these and hibernating. Also be careful to not accumulate
   data outside of the process.
 
+* The `cowboy_compress_h` stream handler can be used for
+  automatic compression of response bodies. Note that it
+  is not suitable for large files when paired with the
+  `cowboy_static` handler or `sendfile` uses, as it will
+  read the entire file into memory to compress it.
+
 * The `cowboy_decompress_h` stream handler can be used for
   automatic decompression of request bodies. Its option
   `decompress_ratio_limit` may be unsafe if the value
