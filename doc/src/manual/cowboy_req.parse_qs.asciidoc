@@ -8,8 +8,11 @@ cowboy_req:parse_qs - Parse the query string
 
 [source,erlang]
 ----
-parse_qs(Req :: cowboy_req:req())
+parse_qs(Req :: cowboy_req:req()) -> parse_qs(Req, #{})
+parse_qs(Req :: cowboy_req:req(), Opts)
     -> [{Key :: binary(), Value :: binary() | true}]
+
+Opts :: #{max_keys => non_neg_integer()}
 ----
 
 Parse the query string as a list of key/value pairs.
@@ -19,6 +22,11 @@ Parse the query string as a list of key/value pairs.
 Req::
 
 The Req object.
+
+Opts::
+
+The `max_keys` option limits the maximum number of
+keys in the query string. It defaults to 100.
 
 == Return value
 
@@ -37,6 +45,7 @@ the key `<<"edit">>` will always have the value `true`:
 
 == Changelog
 
+* *2.17*: Function `parse_qs/2` introduced with a `max_keys` option.
 * *2.0*: The parsed value is not longer cached in the Req object.
 * *2.0*: Only the parsed query string is returned, it is no longer wrapped in a tuple.
 * *2.0*: Function introduced. Replaces `qs_val/1` and `qs_vals/1`.

@@ -52,8 +52,8 @@ A map of body reading options. Please refer to
 link:man:cowboy_req:read_body(3)[cowboy_req:read_body(3)]
 for details about each option.
 +
-This function defaults the `length` to 64KB and the `period`
-to 5 seconds.
+This function defaults the `length` to 64KB, the `period`
+to 5 seconds and `max_keys` to 100.
 
 == Return value
 
@@ -67,6 +67,7 @@ body has been read.
 
 == Changelog
 
+* *2.17*: Option `max_keys` added.
 * *2.0*: Function introduced. Replaces `body_qs/1,2`.
 
 == Examples

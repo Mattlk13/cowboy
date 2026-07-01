@@ -87,6 +87,7 @@ echo(<<"match">>, Req, Opts) ->
 	Value = case Type of
 		<<"qs">> -> cowboy_req:match_qs(Fields, Req);
 		<<"qs_with_constraints">> -> cowboy_req:match_qs([{id, integer}], Req);
+		<<"qs_with_max_keys">> -> cowboy_req:match_qs([{a, nonempty}], Req, #{max_keys => 5});
 		<<"cookies">> -> cowboy_req:match_cookies(Fields, Req);
 		<<"body_qs">> ->
 			%% Note that the Req should not be discarded but for the
@@ -99,6 +100,9 @@ echo(<<"filter_then_parse_cookies">>, Req0, Opts) ->
 	Req = cowboy_req:filter_cookies([cake, color], Req0),
 	Value = cowboy_req:parse_cookies(Req),
 	{ok, cowboy_req:reply(200, #{}, value_to_iodata(Value), Req), Opts};
+echo(<<"parse_qs_with_max_keys">>, Req, Opts) ->
+	[_|_] = cowboy_req:parse_qs(Req, #{max_keys => 5}),
+	{ok, cowboy_req:reply(200, #{}, Req), Opts};
 echo(What, Req, Opts) ->
 	Key = binary_to_atom(What, latin1),
 	Value = case cowboy_req:path(Req) of

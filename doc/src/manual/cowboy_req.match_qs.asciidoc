@@ -9,7 +9,11 @@ cowboy_req:match_qs - Match the query string against constraints
 [source,erlang]
 ----
 match_qs(Fields :: cowboy:fields(), Req :: cowboy_req:req())
+    -> match_qs(Fields, Req, #{})
+match_qs(Fields :: cowboy:fields(), Req :: cowboy_req:req(), Opts)
     -> #{atom() => any()}
+
+Opts :: #{max_keys => non_neg_integer()}
 ----
 
 Parse the query string and match specific values against
@@ -42,6 +46,11 @@ Req::
 
 The Req object.
 
+Opts::
+
+The `max_keys` option limits the maximum number of
+keys in the query string. It defaults to 100.
+
 == Return value
 
 Desired values are returned as a map. The key is the atom
@@ -54,6 +63,7 @@ An exception is triggered when the match fails.
 
 == Changelog
 
+* *2.17*: Function `match_qs/3` introduced with a `max_keys` option.
 * *2.0*: Function introduced.
 
 == Examples

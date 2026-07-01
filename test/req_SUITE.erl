@@ -61,6 +61,7 @@ init_dispatch(Config) ->
 			#{length => 999999999, period => 1000, timeout => 5000, crash => true}},
 		{"/no-opts/:key", echo_h, #{crash => true}},
 		{"/opts/:key/length", echo_h, #{length => 1000}},
+		{"/opts/:key/max_keys", echo_h, #{max_keys => 5}},
 		{"/opts/:key/period", echo_h, #{length => 999999999, period => 2000}},
 		{"/opts/:key/timeout", echo_h, #{timeout => 1000, crash => true}},
 		{"/100-continue/:key", echo_h, []},
@@ -274,6 +275,9 @@ match_qs(Config) ->
 	%% Ensure match errors result in a 400 response.
 	{400, _, _} = do_get("/match/qs/a/c?a=b", [], Config),
 	{400, _, _} = do_get("/match/qs_with_constraints", [], Config),
+	%% Ensure too many keys result in a 400 response.
+	{200, _, _} = do_get("/match/qs_with_max_keys?a=b&c=d&e=f&g=h&i=j", Config),
+	{400, _, _} = do_get("/match/qs_with_max_keys?a=b&c=d&e=f&g=h&i=j&k=l", Config),
 	%% This function is tested more extensively through unit tests.
 	ok.
 
@@ -354,6 +358,9 @@ parse_qs(Config) ->
 	<<"[{<<\"a\">>,<<\"b\">>},{<<\"c\">>,<<\"d e\">>}]">> = do_get_body("/parse_qs?a=b&c=d+e", Config),
 	%% Ensure parse errors result in a 400 response.
 	{400, _, _} = do_get("/parse_qs?%%%%%%%", Config),
+	%% Ensure too many keys result in a 400 response.
+	{200, _, _} = do_get("/parse_qs_with_max_keys?a=b&c=d&e=f&g=h&i=j", Config),
+	{400, _, _} = do_get("/parse_qs_with_max_keys?a=b&c=d&e=f&g=h&i=j&k=l", Config),
 	ok.
 
 path(Config) ->
@@ -602,7 +609,18 @@ read_urlencoded_body(Config) ->
 	ok = do_read_body_timeout("/opts/read_urlencoded_body/timeout", <<"abc">>, Config),
 	%% Ensure parse errors result in a 400 response.
 	{400, _} = do_body_error("POST", "/read_urlencoded_body", [], "%%%%%", Config),
+	%% Ensure too many keys result in a 400 response.
+	<<_/bits>> = do_body("POST", "/opts/read_urlencoded_body/max_keys",
+		[], "a=b&c=d&e=f&g=h&i=j", Config),
+	do_read_urlencoded_body_max_keys("/opts/read_urlencoded_body/max_keys", Config),
 	ok.
+
+do_read_urlencoded_body_max_keys(Path, Config) ->
+	ConnPid = gun_open(Config),
+	Ref = gun:post(ConnPid, Path, [],
+		"a=b&c=d&e=f&g=h&i=j&k=l"),
+	{response, _, 400, _} = gun:await(ConnPid, Ref, infinity),
+	gun:close(ConnPid).
 
 read_urlencoded_body_too_large(Config) ->
 	doc("application/x-www-form-urlencoded request body too large. "
@@ -680,6 +698,10 @@ read_and_match_urlencoded_body(Config) ->
 	{400, _} = do_body_error("POST", "/match/body_qs/a/c", [], "a=b", Config),
 	%% Ensure parse errors result in a 400 response.
 	{400, _} = do_body_error("POST", "/match/body_qs", [], "%%%%%", Config),
+	%% Ensure too many keys result in a 400 response.
+	<<_/bits>> = do_body("POST", "/opts/read_and_match_urlencoded_body/max_keys",
+		[], "a=b&c=d&e=f&g=h&i=j", Config),
+	do_read_urlencoded_body_max_keys("/opts/read_and_match_urlencoded_body/max_keys", Config),
 	%% The timeout value is set too low on purpose to ensure a crash occurs.
 	ok = do_read_body_timeout("/opts/read_and_match_urlencoded_body/timeout", <<"abc">>, Config),
 	ok.

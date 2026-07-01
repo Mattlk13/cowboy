@@ -120,9 +120,10 @@ request's URI.
 [source,erlang]
 ----
 read_body_opts() :: #{
-    length  => non_neg_integer() | auto,
-    period  => non_neg_integer() | infinity,
-    timeout => timeout()
+    length   => non_neg_integer() | auto,
+    max_keys => non_neg_integer(),
+    period   => non_neg_integer() | infinity,
+    timeout  => timeout()
 }
 ----
 

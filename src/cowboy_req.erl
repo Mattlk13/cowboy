@@ -29,7 +29,9 @@
 -export([path_info/1]).
 -export([qs/1]).
 -export([parse_qs/1]).
+-export([parse_qs/2]).
 -export([match_qs/2]).
+-export([match_qs/3]).
 -export([uri/1]).
 -export([uri/2]).
 -export([binding/2]).
@@ -97,7 +99,10 @@
 -type read_body_opts() :: #{
 	length => non_neg_integer() | infinity,
 	period => non_neg_integer(),
-	timeout => timeout()
+	timeout => timeout(),
+
+	%% Only used in read_{and_match_}urlencoded_body.
+	max_keys => non_neg_integer()
 }.
 -export_type([read_body_opts/0]).
 
@@ -219,20 +224,38 @@ path_info(#{path_info := PathInfo}) ->
 qs(#{qs := Qs}) ->
 	Qs.
 
-%% @todo Might be useful to limit the number of keys.
--spec parse_qs(req()) -> [{binary(), binary() | true}].
-parse_qs(#{qs := Qs}) ->
+-spec parse_qs(req())
+	-> [{binary(), binary() | true}].
+
+parse_qs(Req) ->
+	parse_qs(Req, #{}).
+
+-spec parse_qs(req(), cow_qs:parse_opts())
+	-> [{binary(), binary() | true}].
+
+parse_qs(#{qs := Qs}, Opts) ->
 	try
-		cow_qs:parse_qs(Qs)
-	catch _:_:Stacktrace ->
-		erlang:raise(exit, {request_error, qs,
-			'Malformed query string; application/x-www-form-urlencoded expected.'
-		}, Stacktrace)
+		cow_qs:parse_qs(Qs, Opts)
+	catch
+		error:limit_reached:Stacktrace ->
+			erlang:raise(exit, {request_error, limit_reached,
+				'Limit reached while parsing query string.'
+			}, Stacktrace);
+		_:_:Stacktrace ->
+			erlang:raise(exit, {request_error, qs,
+				'Malformed query string; application/x-www-form-urlencoded expected.'
+			}, Stacktrace)
 	end.
 
 -spec match_qs(cowboy:fields(), req()) -> map().
+
 match_qs(Fields, Req) ->
-	case filter(Fields, kvlist_to_map(Fields, parse_qs(Req))) of
+	match_qs(Fields, Req, #{}).
+
+-spec match_qs(cowboy:fields(), req(), cow_qs:parse_opts()) -> map().
+
+match_qs(Fields, Req, Opts) ->
+	case filter(Fields, kvlist_to_map(Fields, parse_qs(Req, Opts))) of
 		{ok, Map} ->
 			Map;
 		{error, Errors} ->
@@ -558,7 +581,7 @@ read_urlencoded_body(Req0, Opts) ->
 	case read_body(Req0, Opts) of
 		{ok, Body, Req} ->
 			try
-				{ok, cow_qs:parse_qs(Body), Req}
+				{ok, cow_qs:parse_qs(Body, maps:with([max_keys], Opts)), Req}
 			catch _:_:Stacktrace ->
 				erlang:raise(exit, {request_error, urlencoded_body,
 					'Malformed body; application/x-www-form-urlencoded expected.'
