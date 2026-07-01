@@ -96,6 +96,9 @@
 	transfer_decode_state :: cow_http_te:state()
 }).
 
+-record(ps_trailer, {
+}).
+
 -record(stream, {
 	id = undefined :: cowboy_stream:streamid(),
 	%% Stream handlers and their state.
@@ -146,7 +149,7 @@
 	in_streamid = 1 :: pos_integer(),
 
 	%% Parsing state for the current stream or stream-to-be.
-	in_state = #ps_request_line{} :: #ps_request_line{} | #ps_header{} | #ps_body{},
+	in_state = #ps_request_line{} :: #ps_request_line{} | #ps_header{} | #ps_body{} | #ps_trailer{},
 
 	%% Flow requested for the current stream.
 	flow = infinity :: non_neg_integer() | infinity,
@@ -397,7 +400,9 @@ parse(Buffer, State=#state{in_state=PS=#ps_header{headers=Headers, name=Name}}) 
 		State#state{in_state=PS#ps_header{headers=undefined, name=undefined}},
 		Headers, Name));
 parse(Buffer, State=#state{in_state=#ps_body{}}) ->
-	after_parse(parse_body(Buffer, State)).
+	after_parse(parse_body(Buffer, State));
+parse(Buffer, State=#state{in_state=#ps_trailer{}}) ->
+	after_parse(parse_trailer(Buffer, State)).
 
 after_parse({request, Req=#{streamid := StreamID, method := Method,
 		headers := Headers, version := Version},
@@ -1024,7 +1029,6 @@ opts_for_upgrade(#state{opts=Opts, dynamic_buffer_size=Size,
 parse_body(Buffer, State=#state{in_streamid=StreamID, in_state=
 		PS=#ps_body{received=Received, transfer_decode_fun=TDecode,
 			transfer_decode_state=TState0}}) ->
-	%% @todo Proper trailers.
 	try TDecode(Buffer, TState0) of
 		more ->
 			{more, State#state{buffer=Buffer}};
@@ -1040,16 +1044,56 @@ parse_body(Buffer, State=#state{in_streamid=StreamID, in_state=
 			{data, StreamID, nofin, Data, State#state{buffer=Rest,
 				in_state=PS#ps_body{received=Received + byte_size(Data),
 					transfer_decode_state=TState}}};
-		{done, _HasTrailers, Rest} ->
-			{data, StreamID, fin, <<>>,
-				State#state{buffer=Rest, in_streamid=StreamID + 1, in_state=#ps_request_line{}}};
-		{done, Data, _HasTrailers, Rest} ->
-			{data, StreamID, fin, Data,
-				State#state{buffer=Rest, in_streamid=StreamID + 1, in_state=#ps_request_line{}}}
+		{done, no_trailers, Rest} ->
+			{data, StreamID, fin, <<>>, State#state{
+				buffer=Rest,
+				in_streamid=StreamID + 1,
+				in_state=#ps_request_line{}
+			}};
+		{done, trailers, Rest} ->
+			{data, StreamID, fin, <<>>, State#state{
+				buffer=Rest,
+				in_state=#ps_trailer{}
+			}};
+		{done, Data, no_trailers, Rest} ->
+			{data, StreamID, fin, Data, State#state{
+				buffer=Rest,
+				in_streamid=StreamID + 1,
+				in_state=#ps_request_line{}
+			}};
+		{done, Data, trailers, Rest} ->
+			{data, StreamID, fin, Data, State#state{
+				buffer=Rest,
+				in_state=#ps_trailer{}
+			}}
 	catch _:_ ->
 		Reason = {connection_error, protocol_error,
 			'Failure to decode the content. (RFC7230 4)'},
 		terminate(stream_terminate(State, StreamID, Reason), Reason)
+	end.
+
+%% Trailer field values.
+
+%% @todo Proper trailers.
+parse_trailer(Buffer, State=#state{in_streamid=StreamID, streams=Streams}) ->
+	case binary:split(Buffer, <<"\r\n\r\n">>) of
+		[_] when byte_size(Buffer) >= 4096 ->
+			Reason = {connection_error, limit_reached,
+				'Trailer field values larger than hard limit allows.'},
+			case Streams of
+				[#stream{id=StreamID}|_] ->
+					terminate(stream_terminate(State, StreamID, Reason), Reason);
+				%% Stream already terminated.
+				_ ->
+					terminate(State, Reason)
+			end;
+		[_] ->
+			{more, State#state{buffer=Buffer}};
+		[_, Rest] ->
+			parse(Rest, State#state{
+				in_streamid=StreamID + 1,
+				in_state=#ps_request_line{}
+			})
 	end.
 
 %% Message handling.
@@ -1521,6 +1565,8 @@ stream_terminate(State0=#state{opts=Opts, in_streamid=InStreamID, in_state=InSta
 				when InStreamID =:= OutStreamID, Received + MaxSkipBodyLength < Len ->
 			terminate(State, skip_body_too_large);
 		#ps_body{} when InStreamID =:= OutStreamID ->
+			stream_next(State#state{flow=infinity});
+		#ps_trailer{} when InStreamID =:= OutStreamID ->
 			stream_next(State#state{flow=infinity});
 		_ ->
 			stream_next(State)

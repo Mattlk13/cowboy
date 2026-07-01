@@ -188,6 +188,52 @@ do_chunked_body(ChunkSize0, Data, Acc) ->
 	do_chunked_body(ChunkSize, Rest,
 		[iolist_to_binary(cow_http_te:chunk(Chunk))|Acc]).
 
+chunked_trailers_skip(Config) ->
+	doc("Confirm that request trailers are skipped and another "
+		"request can be sent on the same connection."),
+	Client = raw_open(Config),
+	ok = raw_send(Client,
+		"POST /echo/read_body HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"Transfer-Encoding: chunked\r\n"
+		"Trailer: x-foo\r\n"
+		"\r\n"
+		"5\r\nHello\r\n"
+		"0\r\n"
+		"X-Foo: bar\r\n"
+		"\r\n"),
+	Data = raw_recv_head(Client),
+	{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
+	{_, Rest} = cow_http:parse_headers(Rest0),
+	RestSize = byte_size(Rest),
+	<<Rest:RestSize/binary, Expect/bits>> = <<"Hello">>,
+	raw_expect_recv(Client, Expect),
+	%% Second request/response on the same connection.
+	ok = raw_send(Client,
+		"GET / HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"\r\n"),
+	Data2 = raw_recv_head(Client),
+	{'HTTP/1.1', 200, _, _} = cow_http:parse_status_line(Data2),
+	ok.
+
+chunked_trailers_skip_limit(Config) ->
+	doc("Confirm that the trailer size limit is enforced and "
+		"results in a 400 error and the closing of the connection."),
+	Client = raw_open(Config),
+	Large = binary:copy(<<"a">>, 5000),
+	ok = raw_send(Client, [
+		"POST /delay_hello HTTP/1.1\r\n"
+		"Host: localhost\r\n"
+		"Transfer-Encoding: chunked\r\n"
+		"\r\n"
+		"0\r\n"
+		"X-Foo: ", Large
+	]),
+	Data = raw_recv_head(Client),
+	{'HTTP/1.1', 400, _, _} = cow_http:parse_status_line(Data),
+	{error, closed} = raw_recv(Client, 0, 1000).
+
 disable_http1_tls(Config) ->
 	doc("Ensure that we can disable HTTP/1.1 over TLS (force HTTP/2)."),
 	TlsOpts = ct_helper:get_certs_from_ets(),

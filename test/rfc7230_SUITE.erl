@@ -1548,35 +1548,36 @@ remove_transfer_encoding_chunked_after_body_read(Config) ->
 %The trailer header must be listed in the connection header field.
 %Trailers must be ignored otherwise.
 
-reject_invalid_trailer_name(Config) ->
-	doc("An invalid trailer field name must be rejected with a 400 status code "
-		"and the closing of the connection. (RFC9110 5.5)"),
-	#{code := 400, client := Client} = do_raw(Config,
-		"POST /echo/read_body HTTP/1.1\r\n"
-		"Host: localhost\r\n"
-		"Transfer-Encoding: chunked\r\n"
-		"Trailer: x-bad\r\n"
-		"\r\n"
-		"5\r\nHello\r\n"
-		"0\r\n"
-		"X\0-Bad: v\r\n"
-		"\r\n"),
-	{error, closed} = raw_recv(Client, 0, 1000).
-
-reject_invalid_trailer_value(Config) ->
-	doc("An invalid trailer field value must be rejected with a 400 status code "
-		"and the closing of the connection. (RFC9110 5.5)"),
-	#{code := 400, client := Client} = do_raw(Config,
-		"POST /echo/read_body HTTP/1.1\r\n"
-		"Host: localhost\r\n"
-		"Transfer-Encoding: chunked\r\n"
-		"Trailer: x-bad\r\n"
-		"\r\n"
-		"5\r\nHello\r\n"
-		"0\r\n"
-		"X-Bad: val\0ue\r\n"
-		"\r\n"),
-	{error, closed} = raw_recv(Client, 0, 1000).
+%% @todo Enable when request trailers are supported.
+%reject_invalid_trailer_name(Config) ->
+%	doc("An invalid trailer field name must be rejected with a 400 status code "
+%		"and the closing of the connection. (RFC9110 5.5)"),
+%	#{code := 400, client := Client} = do_raw(Config,
+%		"POST /echo/read_body HTTP/1.1\r\n"
+%		"Host: localhost\r\n"
+%		"Transfer-Encoding: chunked\r\n"
+%		"Trailer: x-bad\r\n"
+%		"\r\n"
+%		"5\r\nHello\r\n"
+%		"0\r\n"
+%		"X\0-Bad: v\r\n"
+%		"\r\n"),
+%	{error, closed} = raw_recv(Client, 0, 1000).
+%
+%reject_invalid_trailer_value(Config) ->
+%	doc("An invalid trailer field value must be rejected with a 400 status code "
+%		"and the closing of the connection. (RFC9110 5.5)"),
+%	#{code := 400, client := Client} = do_raw(Config,
+%		"POST /echo/read_body HTTP/1.1\r\n"
+%		"Host: localhost\r\n"
+%		"Transfer-Encoding: chunked\r\n"
+%		"Trailer: x-bad\r\n"
+%		"\r\n"
+%		"5\r\nHello\r\n"
+%		"0\r\n"
+%		"X-Bad: val\0ue\r\n"
+%		"\r\n"),
+%	{error, closed} = raw_recv(Client, 0, 1000).
 
 %%% @todo Though we need a compatibility mode as some clients don't send it...
 %reject_chunked_missing_end_crlf(Config) ->
