@@ -309,6 +309,11 @@ access arbitrary files on the filesystem:
   for the `dir` and `priv_dir` options; the `file` and
   `priv_file` options use the configured path directly.
 
+* When using `cowboy_static`, do not create symlinks
+  in directories configured with `dir` or `priv_dir`
+  options using information from untrusted sources
+  as the static handler will follow them.
+
 * The path given in `sendfile` tuples when sending
   response bodies *MUST* be normalized and prefix-checked.
   Calls to `cowboy_req:reply/4`, `cowboy_req:set_resp_body/2`

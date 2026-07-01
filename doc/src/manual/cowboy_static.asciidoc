@@ -72,6 +72,16 @@ Recursively serve files from a directory.
 The path is either absolute or relative to the Erlang node's
 current directory.
 
+NOTE: The static handler considers that the local filesystem
+is trusted. Be careful when writing data on disk to files
+or directories served by the static handler.
+
+NOTE: The static handler follows symlinks and symlinks may
+point to an entirely different location than configured.
+For example, when configured with `dir`, the static handler
+may serve files from outside of this directory if the
+directory contains symlinks.
+
 The extra options allow you to define how the etag should be
 calculated and how the MIME type of files should be detected.
 
