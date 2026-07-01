@@ -71,16 +71,12 @@ chunked_false(Config) ->
 		Request = "GET /resp/stream_reply2/200 HTTP/1.1\r\nhost: localhost\r\n\r\n",
 		Client = raw_open([{type, tcp}, {port, Port}, {opts, []}|Config]),
 		ok = raw_send(Client, Request),
-		Rest = case catch raw_recv_head(Client) of
-			{'EXIT', _} -> error(closed);
-			Data ->
-				%% Cowboy always advertises itself as HTTP/1.1.
-				{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
-				{Headers, Rest1} = cow_http:parse_headers(Rest0),
-				false = lists:keyfind(<<"content-length">>, 1, Headers),
-				false = lists:keyfind(<<"transfer-encoding">>, 1, Headers),
-				Rest1
-		end,
+		Data = raw_recv_head(Client),
+		%% Cowboy always advertises itself as HTTP/1.1.
+		{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
+		{Headers, Rest} = cow_http:parse_headers(Rest0),
+		false = lists:keyfind(<<"content-length">>, 1, Headers),
+		false = lists:keyfind(<<"transfer-encoding">>, 1, Headers),
 		Bits = 8000000 - bit_size(Rest),
 		raw_expect_recv(Client, <<0:Bits>>),
 		{error, closed} = raw_recv(Client, 1, 1000)
@@ -102,13 +98,9 @@ chunked_one_byte_at_a_time(Config) ->
 		raw_send(Client, <<C>>),
 		timer:sleep(1)
 	end || <<C>> <= ChunkedBody],
-	Rest = case catch raw_recv_head(Client) of
-		{'EXIT', _} -> error(closed);
-		Data ->
-			{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
-			{_, Rest1} = cow_http:parse_headers(Rest0),
-			Rest1
-	end,
+	Data = raw_recv_head(Client),
+	{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
+	{_, Rest} = cow_http:parse_headers(Rest0),
 	RestSize = byte_size(Rest),
 	<<Rest:RestSize/binary, Expect/bits>> = Body,
 	raw_expect_recv(Client, Expect).
@@ -127,13 +119,9 @@ chunked_one_chunk_at_a_time(Config) ->
 		raw_send(Client, Chunk),
 		timer:sleep(10)
 	end || Chunk <- Chunks],
-	Rest = case catch raw_recv_head(Client) of
-		{'EXIT', _} -> error(closed);
-		Data ->
-			{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
-			{_, Rest1} = cow_http:parse_headers(Rest0),
-			Rest1
-	end,
+	Data = raw_recv_head(Client),
+	{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
+	{_, Rest} = cow_http:parse_headers(Rest0),
 	RestSize = byte_size(Rest),
 	<<Rest:RestSize/binary, Expect/bits>> = Body,
 	raw_expect_recv(Client, Expect).
@@ -161,13 +149,9 @@ chunked_split_delay_in_chunk_body(Config) ->
 				raw_send(Client, [PartB, <<"\r\n">>])
 		end
 	end || Chunk <- Chunks],
-	Rest = case catch raw_recv_head(Client) of
-		{'EXIT', _} -> error(closed);
-		Data ->
-			{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
-			{_, Rest1} = cow_http:parse_headers(Rest0),
-			Rest1
-	end,
+	Data = raw_recv_head(Client),
+	{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
+	{_, Rest} = cow_http:parse_headers(Rest0),
 	RestSize = byte_size(Rest),
 	<<Rest:RestSize/binary, Expect/bits>> = Body,
 	raw_expect_recv(Client, Expect).
@@ -189,13 +173,9 @@ chunked_split_delay_in_chunk_crlf(Config) ->
 		timer:sleep(10),
 		raw_send(Client, End)
 	end || Chunk <- Chunks],
-	Rest = case catch raw_recv_head(Client) of
-		{'EXIT', _} -> error(closed);
-		Data ->
-			{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
-			{_, Rest1} = cow_http:parse_headers(Rest0),
-			Rest1
-	end,
+	Data = raw_recv_head(Client),
+	{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
+	{_, Rest} = cow_http:parse_headers(Rest0),
 	RestSize = byte_size(Rest),
 	<<Rest:RestSize/binary, Expect/bits>> = Body,
 	raw_expect_recv(Client, Expect).
@@ -308,18 +288,16 @@ http10_keepalive_false(Config) ->
 		Keepalive = "GET / HTTP/1.0\r\nhost: localhost\r\nConnection: keep-alive\r\n\r\n",
 		Client = raw_open([{type, tcp}, {port, Port}, {opts, []}|Config]),
 		ok = raw_send(Client, Keepalive),
-		_ = case catch raw_recv_head(Client) of
-			{'EXIT', _} -> error(closed);
-			Data ->
-				%% Cowboy always advertises itself as HTTP/1.1.
-				{'HTTP/1.1', 200, _, Rest} = cow_http:parse_status_line(Data),
-				{Headers, _} = cow_http:parse_headers(Rest),
-				{_, <<"close">>} = lists:keyfind(<<"connection">>, 1, Headers)
-		end,
+		Data = raw_recv_head(Client),
+		%% Cowboy always advertises itself as HTTP/1.1.
+		{'HTTP/1.1', 200, _, Rest} = cow_http:parse_status_line(Data),
+		{Headers, _} = cow_http:parse_headers(Rest),
+		{_, <<"close">>} = lists:keyfind(<<"connection">>, 1, Headers),
 		ok = raw_send(Client, Keepalive),
-		case catch raw_recv_head(Client) of
-			{'EXIT', _} -> closed;
+		try raw_recv_head(Client) of
 			_ -> error(not_closed)
+		catch _:_ ->
+			closed
 		end
 	after
 		cowboy:stop_listener(?FUNCTION_NAME)
@@ -1063,16 +1041,12 @@ set_options_chunked_false(Config) ->
 		Request = "GET /set_options/chunked_false HTTP/1.1\r\nhost: localhost\r\n\r\n",
 		Client = raw_open([{type, tcp}, {port, Port}, {opts, []}|Config]),
 		ok = raw_send(Client, Request),
-		Rest = case catch raw_recv_head(Client) of
-			{'EXIT', _} -> error(closed);
-			Data ->
-				%% Cowboy always advertises itself as HTTP/1.1.
-				{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
-				{Headers, Rest1} = cow_http:parse_headers(Rest0),
-				false = lists:keyfind(<<"content-length">>, 1, Headers),
-				false = lists:keyfind(<<"transfer-encoding">>, 1, Headers),
-				Rest1
-		end,
+		Data = raw_recv_head(Client),
+		%% Cowboy always advertises itself as HTTP/1.1.
+		{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
+		{Headers, Rest} = cow_http:parse_headers(Rest0),
+		false = lists:keyfind(<<"content-length">>, 1, Headers),
+		false = lists:keyfind(<<"transfer-encoding">>, 1, Headers),
 		Bits = 8000000 - bit_size(Rest),
 		raw_expect_recv(Client, <<0:Bits>>),
 		{error, closed} = raw_recv(Client, 1, 1000)
@@ -1224,14 +1198,10 @@ graceful_shutdown_connection(Config) ->
 		CowboyConnPid = get_remote_pid_tcp(element(2, Client)),
 		CowboyConnRef = erlang:monitor(process, CowboyConnPid),
 		ok = sys:terminate(CowboyConnPid, system_is_going_down),
-		Rest = case catch raw_recv_head(Client) of
-			{'EXIT', _} -> error(closed);
-			Data ->
-				{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
-				{Headers, Rest1} = cow_http:parse_headers(Rest0),
-				<<"close">> = proplists:get_value(<<"connection">>, Headers),
-				Rest1
-		end,
+		Data = raw_recv_head(Client),
+		{'HTTP/1.1', 200, _, Rest0} = cow_http:parse_status_line(Data),
+		{Headers, Rest} = cow_http:parse_headers(Rest0),
+		<<"close">> = proplists:get_value(<<"connection">>, Headers),
 		<<"Hello world!">> = raw_recv_rest(Client, byte_size(<<"Hello world!">>), Rest),
 		{error, closed} = raw_recv(Client, 0, 1000),
 		receive

@@ -20,6 +20,8 @@
 -import(ct_helper, [doc/1]).
 -import(cowboy_test, [gun_open/1]).
 
+-include_lib("stdlib/include/assert.hrl").
+
 all() ->
 	[{group, app}, {group, env}|cowboy_test:common_all()].
 
@@ -98,7 +100,8 @@ get_env(Config0) ->
 		Dispatch = cowboy:get_env(?FUNCTION_NAME, dispatch, the_default),
 		the_value = cowboy:get_env(?FUNCTION_NAME, the_key),
 		the_value = cowboy:get_env(?FUNCTION_NAME, the_key, the_default),
-		{'EXIT', _} = (catch cowboy:get_env(?FUNCTION_NAME, missing_key)),
+		?assertError({badkey, missing_key},
+			cowboy:get_env(?FUNCTION_NAME, missing_key)),
 		the_default = cowboy:get_env(?FUNCTION_NAME, missing_key, the_default)
 	after
 		cowboy:stop_listener(?FUNCTION_NAME)

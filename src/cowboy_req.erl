@@ -163,6 +163,10 @@
 }.
 -export_type([req/0]).
 
+-ifdef(TEST).
+-include_lib("stdlib/include/assert.hrl").
+-endif.
+
 %% Request.
 
 -spec method(req()) -> binary().
@@ -352,9 +356,9 @@ uri2_test() ->
 	<<"http://localhost:8080/path?dummy=2785">> = iolist_to_binary(uri(Req, #{fragment => ""})),
 	<<"http://localhost:8080/path?dummy=2785">> = iolist_to_binary(uri(Req, #{fragment => [<<>>]})),
 	%% Port is integer() | undefined.
-	{'EXIT', _} = (catch iolist_to_binary(uri(Req, #{port => <<>>}))),
-	{'EXIT', _} = (catch iolist_to_binary(uri(Req, #{port => ""}))),
-	{'EXIT', _} = (catch iolist_to_binary(uri(Req, #{port => [<<>>]}))),
+	?assertError(badarg, iolist_to_binary(uri(Req, #{port => <<>>}))),
+	?assertError(badarg, iolist_to_binary(uri(Req, #{port => ""}))),
+	?assertError(badarg, iolist_to_binary(uri(Req, #{port => [<<>>]}))),
 	%% Update components.
 	<<"https://localhost:8080/path?dummy=2785">> = iolist_to_binary(uri(Req, #{scheme => "https"})),
 	<<"http://example.org:8080/path?dummy=2785">> = iolist_to_binary(uri(Req, #{host => "example.org"})),
