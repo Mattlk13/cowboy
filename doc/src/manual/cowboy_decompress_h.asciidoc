@@ -18,7 +18,7 @@ This stream handler always adds a field to the Req object
 with the name `content_decoded` which is treated as a
 list of decoded content-encoding values. Currently this
 list may only contain the `<<"gzip">>` binary if content
-was decoded; or be empty otherwise.
+may be decoded; or be empty otherwise.
 
 == Options
 
@@ -51,6 +51,13 @@ stream handler command. This allows disabling
 decompression for the current stream. Attempts
 to enable or disable decompression after starting
 to read the body will be ignored.
++
+Note that when the handler initialises it removes
+the `content-encoding: gzip` header if any and
+prepares for decompression even when
+`decompress_enabled` is initially set to `false`.
+The `content_decoded` Req object field will
+contain `<<"gzip">>` when that happens.
 
 == Events
 
